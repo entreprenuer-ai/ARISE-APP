@@ -1,0 +1,6 @@
+{
+  "name": "Arise",
+  "description": "Arise is a 100% on-device, fully-featured Alarm, Calendar, Sleep Tracking and Goals app built for offline privacy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
