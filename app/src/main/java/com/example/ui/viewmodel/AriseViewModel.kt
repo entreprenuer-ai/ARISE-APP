@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.core.network.SupabaseClient
 import com.example.data.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -12,6 +13,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class AriseViewModel(
     application: Application,
@@ -19,7 +26,7 @@ class AriseViewModel(
 ) : AndroidViewModel(application) {
 
     // --- Tab Navigation State ---
-    private val _currentTab = MutableStateFlow(AriseTab.Alarms)
+    private val _currentTab = MutableStateFlow(AriseTab.Home)
     val currentTab: StateFlow<AriseTab> = _currentTab.asStateFlow()
 
     fun setTab(tab: AriseTab) {
@@ -40,6 +47,21 @@ class AriseViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val settings: StateFlow<List<AppSetting>> = repository.allSettings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val habits: StateFlow<List<Habit>> = repository.allHabits
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val habitCompletions: StateFlow<List<HabitCompletion>> = repository.allHabitCompletions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val alarmHistory: StateFlow<List<AlarmHistoryItem>> = repository.allAlarmHistory
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val routines: StateFlow<List<Routine>> = repository.allRoutines
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val challenges: StateFlow<List<Challenge>> = repository.allChallenges
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- Active Triggered Alarm (Simulation Screen State) ---
@@ -98,6 +120,421 @@ class AriseViewModel(
     private val _currentBackupJson = MutableStateFlow("")
     val currentBackupJson: StateFlow<String> = _currentBackupJson.asStateFlow()
 
+    // --- Premium & Admin State Management (Freemium Model) ---
+    private val _isPremium = MutableStateFlow(false)
+    val isPremium: StateFlow<Boolean> = _isPremium.asStateFlow()
+
+    private val _habitLimit = MutableStateFlow(3)
+    val habitLimit: StateFlow<Int> = _habitLimit.asStateFlow()
+
+    private val _goalLimit = MutableStateFlow(3)
+    val goalLimit: StateFlow<Int> = _goalLimit.asStateFlow()
+
+    private val _isAdminMode = MutableStateFlow(false)
+    val isAdminMode: StateFlow<Boolean> = _isAdminMode.asStateFlow()
+
+    private val _promoCodeInput = MutableStateFlow("")
+    val promoCodeInput: StateFlow<String> = _promoCodeInput.asStateFlow()
+
+    private val _promoCodeStatus = MutableStateFlow("")
+    val promoCodeStatus: StateFlow<String> = _promoCodeStatus.asStateFlow()
+
+    fun setPremiumStatus(isPrem: Boolean) {
+        _isPremium.value = isPrem
+        viewModelScope.launch {
+            repository.saveSetting("is_premium", isPrem.toString())
+        }
+    }
+
+    fun setHabitLimit(limit: Int) {
+        _habitLimit.value = limit
+        viewModelScope.launch {
+            repository.saveSetting("habit_limit", limit.toString())
+        }
+    }
+
+    fun setGoalLimit(limit: Int) {
+        _goalLimit.value = limit
+        viewModelScope.launch {
+            repository.saveSetting("goal_limit", limit.toString())
+        }
+    }
+
+    fun toggleAdminMode(enable: Boolean) {
+        if (enable && _userRole.value != "admin") {
+            // Enterprise role-based security guard
+            return
+        }
+        _isAdminMode.value = enable
+    }
+
+    fun updatePromoCodeInput(input: String) {
+        _promoCodeInput.value = input
+    }
+
+    fun redeemPromoCode(): Boolean {
+        val code = _promoCodeInput.value.trim().uppercase()
+        if (code == "COSMIC99" || code == "ARISEFREE" || code == "PREMIUMPASS" || code == "ADMIN123") {
+            setPremiumStatus(true)
+            _promoCodeStatus.value = "Promo Code Redeemed! Cosmic Premium Unlocked! 🚀"
+            return true
+        } else {
+            _promoCodeStatus.value = "Invalid Code. Try 'COSMIC99' or 'ADMIN123' if you are an Administrator."
+            return false
+        }
+    }
+
+    fun resetPromoCodeStatus() {
+        _promoCodeStatus.value = ""
+    }
+
+    fun injectMockupAnalyticsData() {
+        viewModelScope.launch {
+            // Inject mock sleep logs of latest 7 days
+            val now = System.currentTimeMillis()
+            for (i in 1..7) {
+                val bed = now - (i * 24 * 3600 * 1000L) - (8 * 3600 * 1000L)
+                val wake = now - (i * 24 * 3600 * 1000L)
+                val mood = listOf("Good", "Neutral", "Tired").random()
+                repository.insertSleepLog(
+                    SleepLog(
+                        bedTime = bed,
+                        wakeTime = wake,
+                        wakeMood = mood,
+                        sleepDebtHours = 0.5f,
+                        targetHours = 8.0f,
+                        notes = "Admin Mock Log $i"
+                    )
+                )
+            }
+            // Inject a mock goal
+            repository.insertGoal(
+                Goal(
+                    title = "Daily Focus Master (Admin Mock)",
+                    description = "Stay focused for 25 minutes daily.",
+                    category = "Productivity",
+                    targetProgress = 10,
+                    currentProgress = 6,
+                    streakCount = 4
+                )
+            )
+            // Inject a mock habit
+            repository.insertHabit(
+                Habit(
+                    title = "Morning Meditation (Admin Mock)",
+                    description = "Breathing operations and zen state.",
+                    frequency = "Daily",
+                    targetCount = 3,
+                    currentStreak = 5,
+                    maxStreak = 8
+                )
+            )
+            _supabaseStatus.value = "Admin Mockup Analytics Data successfully injected!"
+        }
+    }
+
+    // --- Supabase Sync State ---
+    private val _supabaseUrl = MutableStateFlow(SupabaseClient.URL)
+    val supabaseUrl: StateFlow<String> = _supabaseUrl.asStateFlow()
+
+    private val _supabaseAnonKey = MutableStateFlow(SupabaseClient.ANON_KEY)
+    val supabaseAnonKey: StateFlow<String> = _supabaseAnonKey.asStateFlow()
+
+    private val _userEmail = MutableStateFlow("dhanyabotla@gmail.com")
+    val userEmail: StateFlow<String> = _userEmail.asStateFlow()
+
+    private val _supabaseStatus = MutableStateFlow("Tap Sync to connect securely")
+    val supabaseStatus: StateFlow<String> = _supabaseStatus.asStateFlow()
+
+    private val _showSqlSuggestion = MutableStateFlow(false)
+    val showSqlSuggestion: StateFlow<Boolean> = _showSqlSuggestion.asStateFlow()
+
+    // --- Supabase Authentication State ---
+    private val _isLoggedIn = MutableStateFlow(false)
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val _userRole = MutableStateFlow("user") // "user" or "admin"
+    val userRole: StateFlow<String> = _userRole.asStateFlow()
+
+    private val _sessionToken = MutableStateFlow("")
+    val sessionToken: StateFlow<String> = _sessionToken.asStateFlow()
+
+    private val _authLoading = MutableStateFlow(false)
+    val authLoading: StateFlow<Boolean> = _authLoading.asStateFlow()
+
+    private val _authErrorMessage = MutableStateFlow("")
+    val authErrorMessage: StateFlow<String> = _authErrorMessage.asStateFlow()
+
+    fun registerUser(emailStr: String, passwordStr: String, roleVal: String = "user") {
+        viewModelScope.launch {
+            _authLoading.value = true
+            _authErrorMessage.value = ""
+            try {
+                val email = emailStr.trim()
+                val password = passwordStr.trim()
+                if (email.isEmpty() || password.isEmpty()) {
+                    _authErrorMessage.value = "Email and password cannot be empty."
+                    _authLoading.value = false
+                    return@launch
+                }
+                
+                val payload = JSONObject().apply {
+                    put("email", email)
+                    put("password", password)
+                    put("data", JSONObject().apply {
+                        put("role", roleVal)
+                    })
+                }
+
+                val client = SupabaseClient.httpClient
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val body = payload.toString().toRequestBody(mediaType)
+
+                val request = SupabaseClient.newRequestBuilder("/auth/v1/signup")
+                    .post(body)
+                    .build()
+
+                withContext(Dispatchers.IO) {
+                    client.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            withContext(Dispatchers.Main) {
+                                _authErrorMessage.value = "Registration successful! You can now log in securely."
+                                _authLoading.value = false
+                            }
+                        } else {
+                            val errStr = response.body?.string() ?: ""
+                            val errMessage = try {
+                                JSONObject(errStr).optString("msg", "Registration failed: Code ${response.code}")
+                            } catch (e: Exception) {
+                                "Code ${response.code}: $errStr"
+                            }
+                            withContext(Dispatchers.Main) {
+                                _authErrorMessage.value = errMessage
+                                _authLoading.value = false
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _authErrorMessage.value = "Network error: ${e.message}"
+                _authLoading.value = false
+            }
+        }
+    }
+
+    fun loginUser(emailStr: String, passwordStr: String) {
+        viewModelScope.launch {
+            _authLoading.value = true
+            _authErrorMessage.value = ""
+            try {
+                val email = emailStr.trim()
+                val password = passwordStr.trim()
+                if (email.isEmpty() || password.isEmpty()) {
+                    _authErrorMessage.value = "Email and password cannot be empty."
+                    _authLoading.value = false
+                    return@launch
+                }
+
+                val payload = JSONObject().apply {
+                    put("email", email)
+                    put("password", password)
+                }
+
+                val client = SupabaseClient.httpClient
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val body = payload.toString().toRequestBody(mediaType)
+
+                val request = SupabaseClient.newRequestBuilder("/auth/v1/token?grant_type=password")
+                    .post(body)
+                    .build()
+
+                withContext(Dispatchers.IO) {
+                    client.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val responseBody = response.body?.string() ?: ""
+                            val json = JSONObject(responseBody)
+                            val token = json.getString("access_token")
+                            val userObj = json.getJSONObject("user")
+                            val userEmailVal = userObj.getString("email")
+                            val userId = userObj.getString("id")
+                            
+                            // Check role from user_metadata or set user by default.
+                            var role = "user"
+                            if (userObj.has("user_metadata")) {
+                                val meta = userObj.getJSONObject("user_metadata")
+                                if (meta.has("role")) {
+                                    role = meta.getString("role")
+                                }
+                            }
+                            
+                            // Check role from app_metadata as alternative
+                            if (role != "admin" && userObj.has("app_metadata")) {
+                                val appMeta = userObj.getJSONObject("app_metadata")
+                                if (appMeta.has("role")) {
+                                    role = appMeta.getString("role")
+                                }
+                            }
+                            
+                            // Fallback to check public.arise_users table!
+                            if (role != "admin") {
+                                try {
+                                    val profileRequest = SupabaseClient.newRequestBuilder(
+                                        "/rest/v1/arise_users?id=eq.${userId}&select=role",
+                                        token
+                                    ).get().build()
+                                    
+                                    client.newCall(profileRequest).execute().use { profileResp ->
+                                        if (profileResp.isSuccessful) {
+                                            val profileBody = profileResp.body?.string() ?: "[]"
+                                            val profileArr = JSONArray(profileBody)
+                                            if (profileArr.length() > 0) {
+                                                val profileObj = profileArr.getJSONObject(0)
+                                                if (profileObj.has("role")) {
+                                                    role = profileObj.getString("role")
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    // Soft ignored, fallback to metadata role
+                                }
+                            }
+
+                            val finalRole = role
+                            withContext(Dispatchers.Main) {
+                                _userEmail.value = userEmailVal
+                                _sessionToken.value = token
+                                _userRole.value = finalRole
+                                _isLoggedIn.value = true
+                                _authLoading.value = false
+                                _authErrorMessage.value = ""
+                                
+                                viewModelScope.launch {
+                                    repository.saveSetting("logged_in_email", userEmailVal)
+                                    repository.saveSetting("logged_in_role", finalRole)
+                                    repository.saveSetting("session_token", token)
+                                    
+                                    if (finalRole == "admin") {
+                                        _isAdminMode.value = true
+                                        repository.saveSetting("isAdminMode", "true")
+                                    } else {
+                                        _isAdminMode.value = false
+                                        repository.saveSetting("isAdminMode", "false")
+                                    }
+                                    
+                                    _supabaseStatus.value = "Connected as $userEmailVal (${finalRole.uppercase()})"
+                                }
+                            }
+                        } else {
+                            val errStr = response.body?.string() ?: ""
+                            val errMessage = try {
+                                JSONObject(errStr).optString("error_description", "Invalid login credentials.")
+                            } catch (e: Exception) {
+                                "Code ${response.code}: $errStr"
+                            }
+                            withContext(Dispatchers.Main) {
+                                _authErrorMessage.value = errMessage
+                                _authLoading.value = false
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _authErrorMessage.value = "Network error: ${e.message}"
+                _authLoading.value = false
+            }
+        }
+    }
+
+    fun logoutUser() {
+        _isLoggedIn.value = false
+        _userRole.value = "user"
+        _sessionToken.value = ""
+        _isAdminMode.value = false
+        _userEmail.value = ""
+        _authErrorMessage.value = ""
+        viewModelScope.launch {
+            repository.saveSetting("logged_in_email", "")
+            repository.saveSetting("logged_in_role", "user")
+            repository.saveSetting("session_token", "")
+            repository.saveSetting("isAdminMode", "false")
+            _supabaseStatus.value = "Logged out. Tap Sync to connect securely"
+        }
+    }
+
+    fun updateSupabaseUrl(url: String) {
+        _supabaseUrl.value = url
+    }
+
+    fun updateSupabaseAnonKey(key: String) {
+        _supabaseAnonKey.value = key
+    }
+
+    fun updateSupabaseUserEmail(email: String) {
+        _userEmail.value = email
+    }
+
+    fun updateSupabaseStatus(status: String) {
+        _supabaseStatus.value = status
+    }
+
+    // --- Guest/Offline Mode and Custom Feature States ---
+    fun enableGuestMode() {
+        _isLoggedIn.value = true
+        _userEmail.value = "Guest User (Offline)"
+        _userRole.value = "user"
+        _supabaseStatus.value = "In offline Guest Mode. Cloud sync disabled."
+    }
+
+    private val _navigationSoundsEnabled = MutableStateFlow(true)
+    val navigationSoundsEnabled: StateFlow<Boolean> = _navigationSoundsEnabled.asStateFlow()
+
+    fun toggleNavigationSounds() {
+        _navigationSoundsEnabled.value = !_navigationSoundsEnabled.value
+        viewModelScope.launch {
+            repository.saveSetting("nav_sounds_enabled", _navigationSoundsEnabled.value.toString())
+        }
+    }
+
+    private val _customAffirmations = MutableStateFlow<List<String>>(emptyList())
+    val customAffirmations: StateFlow<List<String>> = _customAffirmations.asStateFlow()
+
+    fun addCustomAffirmation(text: String) {
+        val list = _customAffirmations.value.toMutableList()
+        val trimmed = text.trim()
+        if (trimmed.isNotEmpty() && !list.contains(trimmed)) {
+            list.add(trimmed)
+            _customAffirmations.value = list
+            viewModelScope.launch {
+                repository.saveSetting("custom_affirmations_csv", list.joinToString("|||"))
+            }
+        }
+    }
+
+    fun deleteCustomAffirmation(text: String) {
+        val list = _customAffirmations.value.toMutableList()
+        if (list.remove(text.trim())) {
+            _customAffirmations.value = list
+            viewModelScope.launch {
+                repository.saveSetting("custom_affirmations_csv", list.joinToString("|||"))
+            }
+        }
+    }
+
+    private val _dailyWaterCups = MutableStateFlow(0)
+    val dailyWaterCups: StateFlow<Int> = _dailyWaterCups.asStateFlow()
+
+    fun adjustWaterCups(delta: Int) {
+        val newVal = (_dailyWaterCups.value + delta).coerceAtLeast(0)
+        _dailyWaterCups.value = newVal
+        viewModelScope.launch {
+            repository.saveSetting("daily_water_cups", newVal.toString())
+        }
+    }
+
+    private val _firstBootCompleted = MutableStateFlow(false)
+    val firstBootCompleted: StateFlow<Boolean> = _firstBootCompleted.asStateFlow()
+
     // --- Morning Mood Selector ---
     private val _selectedMood = MutableStateFlow("Neutral")
     val selectedMood: StateFlow<String> = _selectedMood.asStateFlow()
@@ -128,15 +565,69 @@ class AriseViewModel(
                         "app_skin" -> _appSkin.value = setting.value
                         "accent_color" -> _customAccentColorHex.value = setting.value
                         "is_dark_theme" -> _isDarkTheme.value = setting.value.toBoolean()
+                        "first_boot_completed" -> _firstBootCompleted.value = setting.value.toBoolean()
+                        "is_premium" -> _isPremium.value = setting.value.toBoolean()
+                        "habit_limit" -> _habitLimit.value = setting.value.toIntOrNull() ?: 3
+                        "goal_limit" -> _goalLimit.value = setting.value.toIntOrNull() ?: 3
                         "app_pin" -> {
                             _appPin.value = setting.value
                             if (setting.value.isNotEmpty()) {
                                 _isAppLocked.value = true
                             }
                         }
+                        "logged_in_email" -> {
+                            if (setting.value.isNotEmpty()) {
+                                _userEmail.value = setting.value
+                                _isLoggedIn.value = true
+                                _supabaseStatus.value = "Connected as ${setting.value} (${_userRole.value.uppercase()})"
+                            }
+                        }
+                        "logged_in_role" -> {
+                            _userRole.value = setting.value
+                            if (setting.value == "admin") {
+                                _isAdminMode.value = true
+                            } else {
+                                _isAdminMode.value = false
+                            }
+                            if (_isLoggedIn.value) {
+                                _supabaseStatus.value = "Connected as ${_userEmail.value} (${setting.value.uppercase()})"
+                            }
+                        }
+                        "session_token" -> {
+                            _sessionToken.value = setting.value
+                        }
+                        "nav_sounds_enabled" -> {
+                            _navigationSoundsEnabled.value = setting.value.toBoolean()
+                        }
+                        "custom_affirmations_csv" -> {
+                            if (setting.value.isNotEmpty()) {
+                                _customAffirmations.value = setting.value.split("|||")
+                            }
+                        }
+                        "daily_water_cups" -> {
+                            _dailyWaterCups.value = setting.value.toIntOrNull() ?: 0
+                        }
                     }
                 }
             }
+        }
+    }
+
+    fun completeOnboarding(skin: String, accentHex: String) {
+        viewModelScope.launch {
+            repository.saveSetting("app_skin", skin)
+            _appSkin.value = skin
+            repository.saveSetting("accent_color", accentHex)
+            _customAccentColorHex.value = accentHex
+            repository.saveSetting("first_boot_completed", "true")
+            _firstBootCompleted.value = true
+        }
+    }
+
+    fun resetOnboarding() {
+        viewModelScope.launch {
+            repository.saveSetting("first_boot_completed", "false")
+            _firstBootCompleted.value = false
         }
     }
 
@@ -155,6 +646,61 @@ class AriseViewModel(
 
     fun updateAlarm(alarm: Alarm) = viewModelScope.launch {
         repository.insertAlarm(alarm)
+    }
+
+    // --- Habits Engine ---
+    fun insertHabit(habit: Habit) = viewModelScope.launch {
+        repository.insertHabit(habit)
+    }
+
+    fun deleteHabit(habit: Habit) = viewModelScope.launch {
+        repository.deleteHabit(habit)
+    }
+
+    fun completeHabit(habitId: Int, notes: String = "") = viewModelScope.launch {
+        val timestamp = System.currentTimeMillis()
+        repository.insertHabitCompletion(HabitCompletion(habitId = habitId, completionTimestamp = timestamp, notes = notes))
+        val habit = repository.getHabitById(habitId)
+        if (habit != null) {
+            val newStreak = if (habit.lastCompletedTimestamp == 0L) {
+                1
+            } else if (timestamp - habit.lastCompletedTimestamp <= 36 * 3600 * 1000) { // completed within 36 hours of last check
+                habit.currentStreak + 1
+            } else {
+                1
+            }
+            val maxStr = if (newStreak > habit.maxStreak) newStreak else habit.maxStreak
+            repository.insertHabit(habit.copy(
+                currentStreak = newStreak,
+                maxStreak = maxStr,
+                lastCompletedTimestamp = timestamp
+            ))
+        }
+    }
+
+    // --- Routines Engine ---
+    fun insertRoutine(routine: Routine) = viewModelScope.launch {
+        repository.insertRoutine(routine)
+    }
+
+    fun deleteRoutine(routine: Routine) = viewModelScope.launch {
+        repository.deleteRoutine(routine)
+    }
+
+    // --- Alarm History Logging ---
+    fun logAlarmPerformance(alarmId: Int, label: String, triggeredTime: Long, dismissedTime: Long, challenge: String, mood: String) = viewModelScope.launch {
+        val diffSec = ((dismissedTime - triggeredTime) / 1000).toInt()
+        repository.insertAlarmHistoryItem(
+            AlarmHistoryItem(
+                alarmId = alarmId,
+                alarmLabel = label,
+                triggeredTime = triggeredTime,
+                dismissedTime = dismissedTime,
+                responseTimeSeconds = diffSec,
+                challengeCompleted = challenge,
+                wakeMood = mood
+            )
+        )
     }
 
     // Simulate Triggering an Alarm to show challenges
@@ -491,6 +1037,8 @@ class AriseViewModel(
                 val goalsVal = goals.value
                 val logsVal = sleepLogs.value
                 val settingsVal = settings.value
+                val habitsVal = habits.value
+                val completionsVal = habitCompletions.value
 
                 val backupRoot = JSONObject()
 
@@ -559,10 +1107,35 @@ class AriseViewModel(
                     sleepArr.put(sl)
                 }
 
+                val habitsArr = JSONArray()
+                habitsVal.forEach {
+                    val h = JSONObject()
+                    h.put("title", it.title)
+                    h.put("description", it.description)
+                    h.put("frequency", it.frequency)
+                    h.put("targetCount", it.targetCount)
+                    h.put("currentStreak", it.currentStreak)
+                    h.put("maxStreak", it.maxStreak)
+                    h.put("lastCompletedTimestamp", it.lastCompletedTimestamp)
+                    h.put("isArchived", it.isArchived)
+                    habitsArr.put(h)
+                }
+
+                val completionsArr = JSONArray()
+                completionsVal.forEach {
+                    val hc = JSONObject()
+                    hc.put("habitId", it.habitId)
+                    hc.put("completionTimestamp", it.completionTimestamp)
+                    hc.put("notes", it.notes)
+                    completionsArr.put(hc)
+                }
+
                 backupRoot.put("alarms", alarmsArr)
                 backupRoot.put("events", eventsArr)
                 backupRoot.put("goals", goalsArr)
                 backupRoot.put("sleep_logs", sleepArr)
+                backupRoot.put("habits", habitsArr)
+                backupRoot.put("habit_completions", completionsArr)
 
                 _currentBackupJson.value = backupRoot.toString(2)
             } catch (e: Exception) {
@@ -663,10 +1236,239 @@ class AriseViewModel(
                         )
                     }
                 }
+
+                // Restore Habits
+                if (root.has("habits")) {
+                    val arr = root.getJSONArray("habits")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertHabit(
+                            Habit(
+                                title = obj.optString("title", "Habit"),
+                                description = obj.optString("description", ""),
+                                frequency = obj.optString("frequency", "Daily"),
+                                targetCount = obj.optInt("targetCount", 1),
+                                currentStreak = obj.optInt("currentStreak", 0),
+                                maxStreak = obj.optInt("maxStreak", 0),
+                                lastCompletedTimestamp = obj.optLong("lastCompletedTimestamp", 0L),
+                                isArchived = obj.optBoolean("isArchived", false)
+                            )
+                        )
+                    }
+                }
+
+                // Restore Habit Completions
+                if (root.has("habit_completions")) {
+                    val arr = root.getJSONArray("habit_completions")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertHabitCompletion(
+                            HabitCompletion(
+                                habitId = obj.optInt("habitId", 0),
+                                completionTimestamp = obj.optLong("completionTimestamp", System.currentTimeMillis()),
+                                notes = obj.optString("notes", "")
+                            )
+                        )
+                    }
+                }
             }
             true
         } catch (e: Exception) {
             false
+        }
+    }
+
+    fun uploadBackupToSupabase() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _supabaseStatus.value = "Uploading backup to Supabase..."
+            _showSqlSuggestion.value = false
+            try {
+                val alarmsVal = alarms.value
+                val eventsVal = events.value
+                val goalsVal = goals.value
+                val logsVal = sleepLogs.value
+                val habitsVal = habits.value
+                val completionsVal = habitCompletions.value
+
+                val backupRoot = JSONObject()
+
+                val alarmsArr = JSONArray()
+                alarmsVal.forEach {
+                    val a = JSONObject()
+                    a.put("label", it.label)
+                    a.put("description", it.description)
+                    a.put("hour", it.hour)
+                    a.put("minute", it.minute)
+                    a.put("repeatDays", it.repeatDays)
+                    a.put("intervalMinutes", it.intervalMinutes)
+                    a.put("gradualVolume", it.gradualVolume)
+                    a.put("vibrationStyle", it.vibrationStyle)
+                    a.put("category", it.category)
+                    a.put("colorTagHex", it.colorTagHex)
+                    a.put("emoji", it.emoji)
+                    a.put("snoozeEnabled", it.snoozeEnabled)
+                    a.put("snoozeDurationMinutes", it.snoozeDurationMinutes)
+                    a.put("snoozeLimit", it.snoozeLimit)
+                    a.put("isSmartSnooze", it.isSmartSnooze)
+                    a.put("bedsideMode", it.bedsideMode)
+                    a.put("flashlightStrobe", it.flashlightStrobe)
+                    a.put("challengeType", it.challengeType)
+                    a.put("challengeDifficulty", it.challengeDifficulty)
+                    alarmsArr.put(a)
+                }
+
+                val eventsArr = JSONArray()
+                eventsVal.forEach {
+                    val ev = JSONObject()
+                    ev.put("title", it.title)
+                    ev.put("notes", it.notes)
+                    ev.put("startTime", it.startTime)
+                    ev.put("endTime", it.endTime)
+                    ev.put("location", it.location)
+                    ev.put("category", it.category)
+                    ev.put("colorHex", it.colorHex)
+                    ev.put("priority", it.priority)
+                    ev.put("reminders", it.reminders)
+                    ev.put("isAllDay", it.isAllDay)
+                    ev.put("recurrence", it.recurrence)
+                    eventsArr.put(ev)
+                }
+
+                val goalsArr = JSONArray()
+                goalsVal.forEach {
+                    val g = JSONObject()
+                    g.put("title", it.title)
+                    g.put("description", it.description)
+                    g.put("category", it.category)
+                    g.put("targetProgress", it.targetProgress)
+                    g.put("currentProgress", it.currentProgress)
+                    g.put("streakCount", it.streakCount)
+                    goalsArr.put(g)
+                }
+
+                val sleepArr = JSONArray()
+                logsVal.forEach {
+                    val sl = JSONObject()
+                    sl.put("bedTime", it.bedTime)
+                    sl.put("wakeTime", it.wakeTime)
+                    sl.put("wakeMood", it.wakeMood)
+                    sl.put("sleepDebtHours", it.sleepDebtHours)
+                    sl.put("targetHours", it.targetHours)
+                    sleepArr.put(sl)
+                }
+
+                val habitsArr = JSONArray()
+                habitsVal.forEach {
+                    val h = JSONObject()
+                    h.put("title", it.title)
+                    h.put("description", it.description)
+                    h.put("frequency", it.frequency)
+                    h.put("targetCount", it.targetCount)
+                    h.put("currentStreak", it.currentStreak)
+                    h.put("maxStreak", it.maxStreak)
+                    h.put("lastCompletedTimestamp", it.lastCompletedTimestamp)
+                    h.put("isArchived", it.isArchived)
+                    habitsArr.put(h)
+                }
+
+                val completionsArr = JSONArray()
+                completionsVal.forEach {
+                    val hc = JSONObject()
+                    hc.put("habitId", it.habitId)
+                    hc.put("completionTimestamp", it.completionTimestamp)
+                    hc.put("notes", it.notes)
+                    completionsArr.put(hc)
+                }
+
+                backupRoot.put("alarms", alarmsArr)
+                backupRoot.put("events", eventsArr)
+                backupRoot.put("goals", goalsArr)
+                backupRoot.put("sleep_logs", sleepArr)
+                backupRoot.put("habits", habitsArr)
+                backupRoot.put("habit_completions", completionsArr)
+
+                val payloadObj = JSONObject()
+                payloadObj.put("user_email", _userEmail.value)
+                payloadObj.put("backup_data", backupRoot)
+
+                val payloadArray = JSONArray()
+                payloadArray.put(payloadObj)
+
+                val client = SupabaseClient.httpClient
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val body = payloadArray.toString().toRequestBody(mediaType)
+
+                val token = SupabaseClient.getAdminSessionToken()
+                val request = SupabaseClient.newRequestBuilder("/rest/v1/arise_backups", token)
+                    .post(body)
+                    .addHeader("Prefer", "resolution=merge-duplicates")
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        _supabaseStatus.value = "Cloud backup sync successful!"
+                    } else {
+                        val code = response.code
+                        val errorBody = response.body?.string() ?: ""
+                        if (code == 404 || errorBody.contains("relation") || errorBody.contains("not found")) {
+                            _supabaseStatus.value = "Table arise_backups not found. SQL setup is required in Supabase dashboard."
+                            _showSqlSuggestion.value = true
+                        } else {
+                            _supabaseStatus.value = "Error $code: $errorBody"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _supabaseStatus.value = "Sync failed: ${e.message}"
+            }
+        }
+    }
+
+    fun restoreBackupFromSupabase() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _supabaseStatus.value = "Querying live cloud storage..."
+            _showSqlSuggestion.value = false
+            try {
+                val client = SupabaseClient.httpClient
+                val token = SupabaseClient.getAdminSessionToken()
+                val request = SupabaseClient.newRequestBuilder(
+                    "/rest/v1/arise_backups?user_email=eq.${_userEmail.value}&select=*",
+                    token
+                ).get().build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val responseStr = response.body?.string() ?: "[]"
+                        val queryResult = JSONArray(responseStr)
+                        if (queryResult.length() > 0) {
+                            val row = queryResult.getJSONObject(0)
+                            val backupDataObj = row.getJSONObject("backup_data")
+
+                            withContext(Dispatchers.Main) {
+                                val success = restoreBackupJson(backupDataObj.toString())
+                                if (success) {
+                                    _supabaseStatus.value = "Cloud restore completed successfully!"
+                                } else {
+                                    _supabaseStatus.value = "Failed to parse loaded backup."
+                                }
+                            }
+                        } else {
+                            _supabaseStatus.value = "No backups found for user ${_userEmail.value}"
+                        }
+                    } else {
+                        val code = response.code
+                        val errorBody = response.body?.string() ?: ""
+                        if (code == 404 || errorBody.contains("relation") || errorBody.contains("not found")) {
+                            _supabaseStatus.value = "Table arise_backups not found. SQL setup is required in Supabase dashboard."
+                            _showSqlSuggestion.value = true
+                        } else {
+                            _supabaseStatus.value = "Error $code: $errorBody"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _supabaseStatus.value = "Restore backup failed: ${e.message}"
+            }
         }
     }
 
@@ -677,6 +1479,7 @@ class AriseViewModel(
 }
 
 enum class AriseTab {
+    Home,
     Alarms,
     Calendar,
     Goals,

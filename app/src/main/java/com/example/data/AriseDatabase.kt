@@ -11,9 +11,14 @@ import androidx.room.RoomDatabase
         CalendarEvent::class,
         Goal::class,
         SleepLog::class,
-        AppSetting::class
+        AppSetting::class,
+        Habit::class,
+        HabitCompletion::class,
+        AlarmHistoryItem::class,
+        Routine::class,
+        Challenge::class
     ],
-    version = 1,
+    version = 4,
     exportSchema = false
 )
 abstract class AriseDatabase : RoomDatabase() {

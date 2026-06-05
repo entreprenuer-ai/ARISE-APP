@@ -77,4 +77,56 @@ interface AriseDao {
 
     @Query("DELETE FROM app_settings WHERE `key` = :key")
     suspend fun deleteSetting(key: String)
+
+
+    // --- HABITS & TRACKING ---
+    @Query("SELECT * FROM habits ORDER BY id DESC")
+    fun getAllHabits(): Flow<List<Habit>>
+
+    @Query("SELECT * FROM habits WHERE id = :id")
+    suspend fun getHabitById(id: Int): Habit?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabit(habit: Habit): Long
+
+    @Delete
+    suspend fun deleteHabit(habit: Habit)
+
+
+    // --- HABIT COMPLETIONS ---
+    @Query("SELECT * FROM habit_completions ORDER BY completionTimestamp DESC")
+    fun getAllHabitCompletions(): Flow<List<HabitCompletion>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabitCompletion(completion: HabitCompletion): Long
+
+    @Delete
+    suspend fun deleteHabitCompletion(completion: HabitCompletion)
+
+
+    // --- ALARM HISTORY ---
+    @Query("SELECT * FROM alarm_history ORDER BY triggeredTime DESC")
+    fun getAllAlarmHistory(): Flow<List<AlarmHistoryItem>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAlarmHistoryItem(item: AlarmHistoryItem): Long
+
+
+    // --- ROUTINES ---
+    @Query("SELECT * FROM routines ORDER BY id DESC")
+    fun getAllRoutines(): Flow<List<Routine>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRoutine(routine: Routine): Long
+
+    @Delete
+    suspend fun deleteRoutine(routine: Routine)
+
+
+    // --- CHALLENGES ---
+    @Query("SELECT * FROM challenges ORDER BY id DESC")
+    fun getAllChallenges(): Flow<List<Challenge>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChallenge(challenge: Challenge): Long
 }

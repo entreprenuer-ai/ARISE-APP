@@ -32,10 +32,25 @@ data class Alarm(
     val passwordProtect: Boolean = false, // Password protect alarm settings
     val passwordPin: String = "",
     val challengeType: String = "None", // "None", "Math", "Memory", "Shake", "Type", "Rhythm", "Tap"
-    val challengeDifficulty: String = "Medium" // "Easy", "Medium", "Hard"
+    val challengeDifficulty: String = "Medium", // "Easy", "Medium", "Hard"
+    val soundPath: String? = null,
+    val soundName: String? = null,
+    val soundStartMs: Int = 0,
+    val soundEndMs: Int = 30
 )
 
-@Entity(tableName = "calendar_events")
+@Entity(
+    tableName = "calendar_events",
+    foreignKeys = [
+        androidx.room.ForeignKey(
+            entity = Alarm::class,
+            parentColumns = ["id"],
+            childColumns = ["linkedAlarmId"],
+            onDelete = androidx.room.ForeignKey.SET_NULL
+        )
+    ],
+    indices = [androidx.room.Index("linkedAlarmId")]
+)
 data class CalendarEvent(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val title: String,
@@ -49,7 +64,7 @@ data class CalendarEvent(
     val reminders: String = "15", // Comma-separated: "15,30,60" minutes before
     val isAllDay: Boolean = false,
     val recurrence: String = "None", // "None", "Daily", "Weekly", "Monthly", "Yearly"
-    val linkedAlarmId: Int = 0, // Fusion feature: Event -> Auto alarm suggestion or link
+    val linkedAlarmId: Int? = null, // Fusion feature: Event -> Auto alarm suggestion or link
     val prepTimeMinutes: Int = 0, // Prep time alarm before event
     val travelTimeMinutes: Int = 0 // Travel buffer alarm (commute)
 )
@@ -86,4 +101,65 @@ data class SleepLog(
 data class AppSetting(
     @PrimaryKey val key: String,
     val value: String
+)
+
+@Entity(tableName = "habits")
+data class Habit(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val description: String = "",
+    val frequency: String = "Daily", // "Daily", "Weekly", "Custom"
+    val targetCount: Int = 1,
+    val currentStreak: Int = 0,
+    val maxStreak: Int = 0,
+    val lastCompletedTimestamp: Long = 0L,
+    val isArchived: Boolean = false,
+    val syncStatus: String = "PENDING" // "PENDING", "SYNCED", "FAILED"
+)
+
+@Entity(tableName = "habit_completions")
+data class HabitCompletion(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val habitId: Int,
+    val completionTimestamp: Long,
+    val notes: String = "",
+    val syncStatus: String = "PENDING"
+)
+
+@Entity(tableName = "alarm_history")
+data class AlarmHistoryItem(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val alarmId: Int,
+    val alarmLabel: String,
+    val triggeredTime: Long,
+    val dismissedTime: Long,
+    val responseTimeSeconds: Int,
+    val challengeCompleted: String = "None", // "Math", "Memory", "Shake", "None"
+    val wakeMood: String = "Neutral",
+    val syncStatus: String = "PENDING"
+)
+
+@Entity(tableName = "routines")
+data class Routine(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val description: String = "",
+    val timeOfDay: String = "Morning", // "Morning", "Evening"
+    val alarmId: Int? = null, // Linked alarm
+    val stepsJson: String = "[]", // Serialized list of steps/subtasks
+    val isActive: Boolean = true,
+    val syncStatus: String = "PENDING"
+)
+
+@Entity(tableName = "challenges")
+data class Challenge(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val type: String, // "Math", "Shake", "Memory", "Rhythm"
+    val difficulty: String = "Medium",
+    val description: String = "",
+    val configJson: String = "{}", // challenge parameters
+    val isUnlocked: Boolean = true,
+    val highHighScore: Int = 0,
+    val syncStatus: String = "PENDING"
 )

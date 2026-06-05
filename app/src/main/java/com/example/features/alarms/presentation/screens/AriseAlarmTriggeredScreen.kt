@@ -1,0 +1,461 @@
+package com.example.features.alarms.presentation.screens
+
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.core.database.Alarm
+import com.example.core.designsystem.CustomColorScheme
+import com.example.features.alarms.presentation.viewmodel.AlarmViewModel
+import androidx.compose.ui.platform.LocalContext
+import java.text.SimpleDateFormat
+import java.util.*
+
+@Composable
+fun AriseAlarmTriggeredScreen(
+    viewModel: AlarmViewModel,
+    colors: CustomColorScheme,
+    fontFamily: FontFamily
+) {
+    val alarm by viewModel.activeTriggeredAlarm.collectAsState()
+    val localAlarm = alarm ?: return
+
+    val context = LocalContext.current
+    var isRinging by remember { mutableStateOf(false) }
+    var mediaPlayerInstance by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+
+    DisposableEffect(localAlarm.id) {
+        val player = android.media.MediaPlayer()
+        try {
+            val alertUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
+                ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+
+            if (localAlarm.soundPath != null) {
+                player.setDataSource(context, android.net.Uri.parse(localAlarm.soundPath))
+            } else {
+                player.setDataSource(context, alertUri)
+            }
+            player.setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            player.prepare()
+            
+            val startPosMs = (localAlarm.soundStartMs * 1000).coerceAtLeast(0)
+            player.seekTo(startPosMs)
+            player.start()
+            mediaPlayerInstance = player
+            isRinging = true
+        } catch (e: Exception) {
+            try {
+                val fallbackUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+                val fallbackPlayer = android.media.MediaPlayer.create(context, fallbackUri)
+                fallbackPlayer?.isLooping = true
+                fallbackPlayer?.start()
+                mediaPlayerInstance = fallbackPlayer
+                isRinging = true
+            } catch (ex: Exception) {}
+        }
+
+        onDispose {
+            isRinging = false
+            try {
+                mediaPlayerInstance?.let {
+                    if (it.isPlaying) {
+                        it.stop()
+                    }
+                    it.release()
+                }
+            } catch (e: Exception) {}
+            mediaPlayerInstance = null
+        }
+    }
+
+    LaunchedEffect(localAlarm.id, isRinging) {
+        if (isRinging) {
+            val startPosMs = (localAlarm.soundStartMs * 1000).coerceAtLeast(0)
+            val endPosMs = (localAlarm.soundEndMs * 1000).coerceAtLeast(startPosMs + 2000)
+            while (isRinging) {
+                try {
+                    mediaPlayerInstance?.let { player ->
+                        if (player.isPlaying) {
+                            val currentPos = player.currentPosition
+                            if (currentPos >= endPosMs || currentPos < startPosMs) {
+                                player.seekTo(startPosMs)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {}
+                kotlinx.coroutines.delay(200)
+            }
+        }
+    }
+
+    var mathInput by remember { mutableStateOf("") }
+    var typeInput by remember { mutableStateOf("") }
+
+    val shakeCount by viewModel.shakeCount.collectAsState()
+    val mathProblem by viewModel.mathProblem.collectAsState()
+    val memoryPattern by viewModel.memoryPattern.collectAsState()
+    val memorySelection by viewModel.memorySelection.collectAsState()
+    val typingTarget by viewModel.typingTarget.collectAsState()
+    val countBackwardVal by viewModel.currentCountBackward.collectAsState()
+    val strobeActive by viewModel.strobeActive.collectAsState()
+
+    val shakeTarget = if (localAlarm.challengeDifficulty == "Hard") 40 else if (localAlarm.challengeDifficulty == "Easy") 15 else 25
+
+    // Infinite pulsing visual animation
+    val infiniteTransition = rememberInfiniteTransition()
+    val scaleFactor by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    val stbackgroundColor = if (strobeActive && (System.currentTimeMillis() % 600 > 300)) Color.White else colors.background
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(stbackgroundColor)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // Glowing flashing alarm bell banner representation
+        IconButton(
+            onClick = {},
+            modifier = Modifier
+                .size(100.dp)
+                .drawBehind {
+                    drawCircle(
+                        color = colors.primary.copy(alpha = 0.2f),
+                        radius = size.minDimension * 0.75f * scaleFactor
+                    )
+                }
+        ) {
+            Text(localAlarm.emoji, fontSize = 60.sp)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        val nowStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+        Text(
+            text = nowStr,
+            fontFamily = fontFamily,
+            fontSize = 48.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = colors.onBackground
+        )
+
+        Text(
+            text = localAlarm.label,
+            fontFamily = fontFamily,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = colors.primary,
+            textAlign = TextAlign.Center
+        )
+
+        if (localAlarm.description.isNotEmpty()) {
+            Text(
+                text = localAlarm.description,
+                fontFamily = fontFamily,
+                fontSize = 14.sp,
+                color = colors.onBackground.copy(alpha = 0.75f),
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // MOOD SELECTOR ON WAKING (Feature Bible requirement)
+        Text(
+            text = "HOW IS YOUR WAKEUP MOOD?",
+            fontFamily = fontFamily,
+            color = colors.onBackground,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(0.9f),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val moods = listOf(
+                "Good" to "☀️ Good",
+                "Neutral" to "😐 Neutral",
+                "Tired" to "💤 Tired"
+            )
+            moods.forEach { (key, display) ->
+                var isSelected by remember { mutableStateOf(false) }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) colors.primaryContainer else Color.Transparent)
+                        .border(1.dp, if (isSelected) colors.primary else colors.divider, RoundedCornerShape(8.dp))
+                        .clickable { isSelected = !isSelected }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(display, fontFamily = fontFamily, fontSize = 11.sp, color = colors.onBackground)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // CHALLENGE MODULE GATES DISPLAY
+        Card(
+            modifier = Modifier.fillMaxWidth(0.95f),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = BorderStroke(2.dp, colors.primary)
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "DISMISS GATE: ${localAlarm.challengeType.uppercase()} GATE",
+                    fontFamily = fontFamily,
+                    color = colors.primary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                when (localAlarm.challengeType) {
+                    "Math" -> {
+                        Text(
+                            text = "Solve Math Challenge: $mathProblem",
+                            fontFamily = fontFamily,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = mathInput,
+                            onValueChange = { mathInput = it },
+                            placeholder = { Text("Type Answer") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .testTag("gate_math_input")
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = {
+                                val parsed = mathInput.toIntOrNull() ?: 0
+                                viewModel.submitMathAnswer(parsed)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            modifier = Modifier.testTag("gate_math_submit")
+                        ) {
+                            Text("Submit Key", color = colors.onPrimary)
+                        }
+                    }
+
+                    "Memory" -> {
+                        Text(
+                            text = "Memorize & Tap Active Tiles Pattern",
+                            fontFamily = fontFamily,
+                            fontSize = 13.sp,
+                            color = colors.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        val count = memoryPattern.size
+                        val columns = if (count == 16) 4 else 3
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(columns),
+                            modifier = Modifier
+                                .size(200.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        ) {
+                            items(count) { idx ->
+                                Box(
+                                    modifier = Modifier
+                                        .aspectRatio(1f)
+                                        .padding(4.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(
+                                            if (memorySelection[idx]) colors.primary
+                                            else colors.primaryContainer.copy(alpha = 0.5f)
+                                        )
+                                        .clickable { viewModel.toggleMemoryTile(idx) }
+                                )
+                            }
+                        }
+                    }
+
+                    "Shake" -> {
+                        Text(
+                            text = "Shake Phone to Inc: $shakeCount / $shakeTarget",
+                            fontFamily = fontFamily,
+                            fontSize = 16.sp,
+                            color = colors.onSurface,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LinearProgressIndicator(
+                            progress = { shakeCount.toFloat() / shakeTarget.toFloat() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(12.dp)
+                                .clip(RoundedCornerShape(6.dp)),
+                            color = colors.primary,
+                            trackColor = colors.divider
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = { viewModel.recordShake() },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clip(CircleShape)
+                                .testTag("gate_shake_simulator")
+                        ) {
+                            Text("SHAKE", color = colors.onPrimary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    "Type" -> {
+                        Text(
+                            text = "Type this inspirational quote exactly:",
+                            fontFamily = fontFamily,
+                            fontSize = 11.sp,
+                            color = colors.onSurface
+                        )
+                        Text(
+                            text = "“$typingTarget”",
+                            fontFamily = fontFamily,
+                            fontSize = 13.sp,
+                            color = colors.primary,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = typeInput,
+                            onValueChange = { typeInput = it },
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { viewModel.submitTypingAnswer(typeInput) },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                        ) {
+                            Text("Submit Match", color = colors.onPrimary)
+                        }
+                    }
+
+                    "Counting" -> {
+                        Text(
+                            text = "Solve spelling counting: Countdown backwards!",
+                            fontFamily = fontFamily,
+                            fontSize = 12.sp,
+                            color = colors.onSurface
+                        )
+                        Text(
+                            text = "$countBackwardVal",
+                            fontFamily = fontFamily,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = colors.primary
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { viewModel.countBackwardMinusOne() },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                        ) {
+                            Text("Count Down (-1)", color = colors.onPrimary)
+                        }
+                    }
+
+                    "Rhythm" -> {
+                        Text(
+                            text = "Tap the button consistently in synchronization",
+                            fontFamily = fontFamily,
+                            fontSize = 12.sp,
+                            color = colors.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = { viewModel.triggerRhythmTap() },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Text("TAP", color = colors.onPrimary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    else -> {
+                        // Standard basic dismiss
+                        Button(
+                            onClick = { viewModel.dismissActiveAlarm() },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .height(48.dp)
+                                .testTag("gate_standard_dismiss")
+                        ) {
+                            Text("Dismiss Wakeup Alert", color = colors.onPrimary)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        if (localAlarm.snoozeEnabled) {
+            Button(
+                onClick = { viewModel.snoozeActiveAlarm() },
+                colors = ButtonDefaults.buttonColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.primary),
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .height(44.dp)
+                    .testTag("gate_snooze_button")
+            ) {
+                Text("Snooze (${localAlarm.snoozeDurationMinutes}m Limit: ${localAlarm.snoozeLimit}x)", color = colors.primary, fontFamily = fontFamily)
+            }
+        }
+    }
+}

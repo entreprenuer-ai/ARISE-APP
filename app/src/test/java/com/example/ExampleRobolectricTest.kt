@@ -18,4 +18,15 @@ class ExampleRobolectricTest {
     val appName = context.getString(R.string.app_name)
     assertEquals("Arise", appName)
   }
+
+  @Test
+  fun `test database and viewmodel initialization`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val database = com.example.data.AriseDatabase.getDatabase(context)
+    val dao = database.ariseDao()
+    val repository = com.example.data.AriseRepository(dao)
+    val app = context as android.app.Application
+    val vm = com.example.ui.viewmodel.AriseViewModel(app, repository)
+    assert(vm != null)
+  }
 }

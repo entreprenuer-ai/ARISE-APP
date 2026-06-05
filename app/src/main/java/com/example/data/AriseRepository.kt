@@ -56,4 +56,45 @@ class AriseRepository(private val ariseDao: AriseDao) {
         ariseDao.insertSetting(AppSetting(key, value))
 
     suspend fun deleteSetting(key: String) = ariseDao.deleteSetting(key)
+
+
+    // --- HABITS & TRACKING ---
+    val allHabits: Flow<List<Habit>> = ariseDao.getAllHabits()
+
+    suspend fun getHabitById(id: Int): Habit? = ariseDao.getHabitById(id)
+
+    suspend fun insertHabit(habit: Habit): Long = ariseDao.insertHabit(habit)
+
+    suspend fun deleteHabit(habit: Habit) = ariseDao.deleteHabit(habit)
+
+
+    // --- HABIT COMPLETIONS ---
+    val allHabitCompletions: Flow<List<HabitCompletion>> = ariseDao.getAllHabitCompletions()
+
+    suspend fun insertHabitCompletion(completion: HabitCompletion): Long = 
+        ariseDao.insertHabitCompletion(completion)
+
+    suspend fun deleteHabitCompletion(completion: HabitCompletion) = 
+        ariseDao.deleteHabitCompletion(completion)
+
+
+    // --- ALARM HISTORY ---
+    val allAlarmHistory: Flow<List<AlarmHistoryItem>> = ariseDao.getAllAlarmHistory()
+
+    suspend fun insertAlarmHistoryItem(item: AlarmHistoryItem): Long = 
+        ariseDao.insertAlarmHistoryItem(item)
+
+
+    // --- ROUTINES ---
+    val allRoutines: Flow<List<Routine>> = ariseDao.getAllRoutines()
+
+    suspend fun insertRoutine(routine: Routine): Long = ariseDao.insertRoutine(routine)
+
+    suspend fun deleteRoutine(routine: Routine) = ariseDao.deleteRoutine(routine)
+
+
+    // --- CHALLENGES ---
+    val allChallenges: Flow<List<Challenge>> = ariseDao.getAllChallenges()
+
+    suspend fun insertChallenge(challenge: Challenge): Long = ariseDao.insertChallenge(challenge)
 }
