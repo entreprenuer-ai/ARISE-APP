@@ -2,6 +2,8 @@ package com.example.features.dashboard.presentation.screens
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -46,7 +48,9 @@ fun AriseMainDashboardScreen(
     val currentTab by dashboardViewModel.currentTab.collectAsState()
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         containerColor = colors.background,
         bottomBar = {
             AriseBottomBar(
@@ -60,6 +64,7 @@ fun AriseMainDashboardScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(innerPadding)
         ) {
             when (currentTab) {
                 AriseTab.Home -> {
@@ -83,6 +88,7 @@ fun AriseMainDashboardScreen(
                 AriseTab.Calendar -> {
                     AriseCalendarTab(
                         viewModel = calendarViewModel,
+                        alarmViewModel = alarmViewModel,
                         colors = colors,
                         fontFamily = fontFamily
                     )

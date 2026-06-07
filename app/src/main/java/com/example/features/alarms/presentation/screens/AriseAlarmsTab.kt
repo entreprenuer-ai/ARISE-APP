@@ -37,6 +37,8 @@ fun AriseAlarmsTab(
 ) {
     val alarmsList by viewModel.alarms.collectAsState()
     var showAddSheet by remember { mutableStateOf(false) }
+    var alarmToEdit by remember { mutableStateOf<Alarm?>(null) }
+    var showEditSheet by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (alarmsList.isEmpty()) {
@@ -76,7 +78,16 @@ fun AriseAlarmsTab(
                     .padding(horizontal = 16.dp)
             ) {
                 items(alarmsList) { alarm ->
-                    AriseAlarmCard(viewModel, alarm, colors, fontFamily)
+                    AriseAlarmCard(
+                        viewModel = viewModel,
+                        alarm = alarm,
+                        colors = colors,
+                        fontFamily = fontFamily,
+                        onEditClick = {
+                            alarmToEdit = alarm
+                            showEditSheet = true
+                        }
+                    )
                 }
                 item {
                     Spacer(modifier = Modifier.height(88.dp))
@@ -104,6 +115,19 @@ fun AriseAlarmsTab(
                 onDismiss = { showAddSheet = false }
             )
         }
+
+        if (showEditSheet && alarmToEdit != null) {
+            AriseAlarmDesignerDialog(
+                viewModel = viewModel,
+                colors = colors,
+                fontFamily = fontFamily,
+                alarmToEdit = alarmToEdit,
+                onDismiss = {
+                    showEditSheet = false
+                    alarmToEdit = null
+                }
+            )
+        }
     }
 }
 
@@ -112,7 +136,8 @@ fun AriseAlarmCard(
     viewModel: AlarmViewModel,
     alarm: Alarm,
     colors: CustomColorScheme,
-    fontFamily: FontFamily
+    fontFamily: FontFamily,
+    onEditClick: ((Alarm) -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -266,6 +291,20 @@ fun AriseAlarmCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
+                    if (onEditClick != null) {
+                        Button(
+                            onClick = { onEditClick(alarm) },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.85f)),
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .testTag("edit_alarm_${alarm.id}")
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit Alarm", tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Edit", color = Color.White, fontFamily = fontFamily, fontSize = 12.sp)
+                        }
+                    }
+
                     Button(
                         onClick = { viewModel.deleteAlarm(alarm) },
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.85f)),
@@ -286,21 +325,22 @@ fun AriseAlarmDesignerDialog(
     viewModel: AlarmViewModel,
     colors: CustomColorScheme,
     fontFamily: FontFamily,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    alarmToEdit: Alarm? = null
 ) {
-    var label by remember { mutableStateOf("Morning Awake") }
-    var description by remember { mutableStateOf("Wake up and conquer") }
-    var hour by remember { mutableStateOf(7) }
-    var minute by remember { mutableStateOf(30) }
-    var repeatDays by remember { mutableStateOf("Mon,Tue,Wed,Thu,Fri") }
-    var challengeType by remember { mutableStateOf("Math") }
-    var challengeDifficulty by remember { mutableStateOf("Medium") }
-    var vibrationStyle by remember { mutableStateOf("Medium") }
-    var gradualVolume by remember { mutableStateOf(true) }
-    var flashlightStrobe by remember { mutableStateOf(false) }
-    var snoozeLimit by remember { mutableStateOf(3) }
-    var snoozeDuration by remember { mutableStateOf(5) }
-    var emojiLabel by remember { mutableStateOf("⏰") }
+    var label by remember { mutableStateOf(alarmToEdit?.label ?: "Morning Awake") }
+    var description by remember { mutableStateOf(alarmToEdit?.description ?: "Wake up and conquer") }
+    var hour by remember { mutableStateOf(alarmToEdit?.hour ?: 7) }
+    var minute by remember { mutableStateOf(alarmToEdit?.minute ?: 30) }
+    var repeatDays by remember { mutableStateOf(alarmToEdit?.repeatDays ?: "Mon,Tue,Wed,Thu,Fri") }
+    var challengeType by remember { mutableStateOf(alarmToEdit?.challengeType ?: "Math") }
+    var challengeDifficulty by remember { mutableStateOf(alarmToEdit?.challengeDifficulty ?: "Medium") }
+    var vibrationStyle by remember { mutableStateOf(alarmToEdit?.vibrationStyle ?: "Medium") }
+    var gradualVolume by remember { mutableStateOf(alarmToEdit?.gradualVolume ?: true) }
+    var flashlightStrobe by remember { mutableStateOf(alarmToEdit?.flashlightStrobe ?: false) }
+    var snoozeLimit by remember { mutableStateOf(alarmToEdit?.snoozeLimit ?: 3) }
+    var snoozeDuration by remember { mutableStateOf(alarmToEdit?.snoozeDurationMinutes ?: 5) }
+    var emojiLabel by remember { mutableStateOf(alarmToEdit?.emoji ?: "⏰") }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -513,23 +553,43 @@ fun AriseAlarmDesignerDialog(
 
                     Button(
                         onClick = {
-                            viewModel.insertAlarm(
-                                Alarm(
-                                    label = label,
-                                    description = description,
-                                    hour = hour,
-                                    minute = minute,
-                                    repeatDays = repeatDays,
-                                    challengeType = challengeType,
-                                    challengeDifficulty = challengeDifficulty,
-                                    vibrationStyle = vibrationStyle,
-                                    gradualVolume = gradualVolume,
-                                    flashlightStrobe = flashlightStrobe,
-                                    snoozeLimit = snoozeLimit,
-                                    snoozeDurationMinutes = snoozeDuration,
-                                    emoji = emojiLabel
+                            if (alarmToEdit != null) {
+                                viewModel.updateAlarm(
+                                    alarmToEdit.copy(
+                                        label = label,
+                                        description = description,
+                                        hour = hour,
+                                        minute = minute,
+                                        repeatDays = repeatDays,
+                                        challengeType = challengeType,
+                                        challengeDifficulty = challengeDifficulty,
+                                        vibrationStyle = vibrationStyle,
+                                        gradualVolume = gradualVolume,
+                                        flashlightStrobe = flashlightStrobe,
+                                        snoozeLimit = snoozeLimit,
+                                        snoozeDurationMinutes = snoozeDuration,
+                                        emoji = emojiLabel
+                                    )
                                 )
-                            )
+                            } else {
+                                viewModel.insertAlarm(
+                                    Alarm(
+                                        label = label,
+                                        description = description,
+                                        hour = hour,
+                                        minute = minute,
+                                        repeatDays = repeatDays,
+                                        challengeType = challengeType,
+                                        challengeDifficulty = challengeDifficulty,
+                                        vibrationStyle = vibrationStyle,
+                                        gradualVolume = gradualVolume,
+                                        flashlightStrobe = flashlightStrobe,
+                                        snoozeLimit = snoozeLimit,
+                                        snoozeDurationMinutes = snoozeDuration,
+                                        emoji = emojiLabel
+                                    )
+                                )
+                            }
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = colors.primary),

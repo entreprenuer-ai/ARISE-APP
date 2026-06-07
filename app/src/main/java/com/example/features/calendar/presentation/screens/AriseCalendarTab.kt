@@ -26,17 +26,37 @@ import com.example.core.database.Alarm
 import com.example.core.database.CalendarEvent
 import com.example.core.designsystem.CustomColorScheme
 import com.example.features.calendar.presentation.viewmodel.CalendarViewModel
+import com.example.features.alarms.presentation.viewmodel.AlarmViewModel
+import com.example.features.alarms.presentation.screens.AriseAlarmCard
+import com.example.features.alarms.presentation.screens.AriseAlarmDesignerDialog
 import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
 fun AriseCalendarTab(
     viewModel: CalendarViewModel,
+    alarmViewModel: AlarmViewModel,
     colors: CustomColorScheme,
     fontFamily: FontFamily
 ) {
     val eventsList by viewModel.events.collectAsState()
+    val alarmsList by viewModel.alarms.collectAsState()
     var showAddEvent by remember { mutableStateOf(false) }
+    var showAddAlarmDirect by remember { mutableStateOf(false) }
+    var showAddChoiceDialog by remember { mutableStateOf(false) }
+
+    var eventToEdit by remember { mutableStateOf<CalendarEvent?>(null) }
+    var showEditEvent by remember { mutableStateOf(false) }
+
+    var alarmToEdit by remember { mutableStateOf<Alarm?>(null) }
+    var showEditAlarm by remember { mutableStateOf(false) }
+    var showYearNavigator by remember { mutableStateOf(false) }
+
+    // Google Calendar Sync States
+    val googleSyncStatus by viewModel.googleSyncStatus.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
+    var showGoogleSyncDialog by remember { mutableStateOf(false) }
+    var tokenInputText by remember { mutableStateOf("") }
 
     // Calendar navigation states
     val calendarInstance = remember { Calendar.getInstance() }
@@ -83,12 +103,138 @@ fun AriseCalendarTab(
         eventsList.filter { it.startTime >= startMs && it.startTime < endMs }
     }
 
+    val selectedDayOfWeek = remember(selectedDateCalendar) {
+        val dayOfWeekNames = listOf("", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+        val idx = selectedDateCalendar.get(Calendar.DAY_OF_WEEK)
+        if (idx in 1..7) dayOfWeekNames[idx] else ""
+    }
+
+    val activeAlarmsOnDay = remember(alarmsList, selectedDayOfWeek) {
+        alarmsList.filter { alarm ->
+            !alarm.label.contains("Event:") &&
+            (alarm.repeatDays.contains("Daily", ignoreCase = true) ||
+             alarm.repeatDays.contains(selectedDayOfWeek, ignoreCase = true) ||
+             alarm.repeatDays.contains("One-time", ignoreCase = true))
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 80.dp)
         ) {
+            // Google Calendar Synchronization Strip Panel
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("google_sync_banner_card"),
+                colors = CardDefaults.cardColors(containerColor = colors.primaryContainer.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CloudSync,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "GOOGLE CALENDAR",
+                                fontFamily = fontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary
+                            )
+                        }
+                        if (googleSyncStatus.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = googleSyncStatus,
+                                fontFamily = fontFamily,
+                                fontSize = 11.sp,
+                                color = colors.onBackground,
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Synchronize upcoming meetings with alarm triggers.",
+                                fontFamily = fontFamily,
+                                fontSize = 10.sp,
+                                color = colors.onBackground.copy(alpha = 0.65f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        IconButton(
+                            onClick = { showGoogleSyncDialog = true },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(colors.surface)
+                                .border(1.dp, colors.primary.copy(alpha = 0.2f), CircleShape)
+                                .testTag("btn_manage_google_conn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Manage Token",
+                                tint = colors.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        Button(
+                            onClick = { viewModel.syncWithGoogleCalendar(null) },
+                            enabled = !isSyncing,
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier
+                                .height(32.dp)
+                                .testTag("btn_sync_google_now")
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(
+                                    color = colors.onPrimary,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = null,
+                                    tint = colors.onPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Sync",
+                                    fontFamily = fontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Calendar Month Navigation Panel Card
             Card(
                 modifier = Modifier
@@ -109,40 +255,87 @@ fun AriseCalendarTab(
                             "January", "February", "March", "April", "May", "June",
                             "July", "August", "September", "October", "November", "December"
                         )
-                        IconButton(
-                            onClick = {
-                                if (currentMonth == 0) {
-                                    currentMonth = 11
-                                    currentYear -= 1
-                                } else {
-                                    currentMonth -= 1
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = " << ",
+                                fontFamily = fontFamily,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Black,
+                                color = colors.primary.copy(alpha = 0.61f),
+                                modifier = Modifier
+                                    .clickable {
+                                        currentYear -= 1
+                                        selectedDay = 1
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                                    .testTag("prev_year_btn")
+                            )
+                            IconButton(
+                                onClick = {
+                                    if (currentMonth == 0) {
+                                        currentMonth = 11
+                                        currentYear -= 1
+                                    } else {
+                                        currentMonth -= 1
+                                    }
+                                    selectedDay = 1 // reset to first of month
                                 }
-                                selectedDay = 1 // reset to first of month
+                            ) {
+                                Icon(Icons.Default.ArrowLeft, contentDescription = "Prev Month", tint = colors.primary)
                             }
-                        ) {
-                            Icon(Icons.Default.ArrowLeft, contentDescription = "Prev Month", tint = colors.primary)
                         }
 
-                        Text(
-                            text = "${monthsArray[currentMonth]} $currentYear",
-                            fontFamily = fontFamily,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = colors.primary
-                        )
-
-                        IconButton(
-                            onClick = {
-                                if (currentMonth == 11) {
-                                    currentMonth = 0
-                                    currentYear += 1
-                                } else {
-                                    currentMonth += 1
-                                }
-                                selectedDay = 1 // reset to first of month
-                            }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable { showYearNavigator = true }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .testTag("btn_open_year_navigator")
                         ) {
-                            Icon(Icons.Default.ArrowRight, contentDescription = "Next Month", tint = colors.primary)
+                            Text(
+                                text = "${monthsArray[currentMonth]} $currentYear",
+                                fontFamily = fontFamily,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = colors.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Open Year Navigator",
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    if (currentMonth == 11) {
+                                        currentMonth = 0
+                                        currentYear += 1
+                                    } else {
+                                        currentMonth += 1
+                                    }
+                                    selectedDay = 1 // reset to first of month
+                                }
+                            ) {
+                                Icon(Icons.Default.ArrowRight, contentDescription = "Next Month", tint = colors.primary)
+                            }
+                            Text(
+                                text = " >> ",
+                                fontFamily = fontFamily,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Black,
+                                color = colors.primary.copy(alpha = 0.61f),
+                                modifier = Modifier
+                                    .clickable {
+                                        currentYear += 1
+                                        selectedDay = 1
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                                    .testTag("next_year_btn")
+                            )
                         }
                     }
 
@@ -273,8 +466,9 @@ fun AriseCalendarTab(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
             )
 
-            // Dynamic list showing selected day events or a cute empty slate
-            if (activeEventsOnDay.isEmpty()) {
+            // Dynamic list showing selected day events & alarms or a cute empty slate
+            val dayHasAgenda = activeEventsOnDay.isNotEmpty() || activeAlarmsOnDay.isNotEmpty()
+            if (!dayHasAgenda) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -305,8 +499,59 @@ fun AriseCalendarTab(
                         .weight(1f)
                         .padding(horizontal = 16.dp)
                 ) {
-                    items(activeEventsOnDay) { event ->
-                        AriseEventCard(viewModel, event, colors, fontFamily)
+                    if (activeEventsOnDay.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "📅 EVENTS & PLANNER",
+                                fontFamily = fontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                        items(activeEventsOnDay) { event ->
+                            AriseEventCard(
+                                viewModel = viewModel,
+                                event = event,
+                                colors = colors,
+                                fontFamily = fontFamily,
+                                onEditClick = {
+                                    eventToEdit = event
+                                    showEditEvent = true
+                                }
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(10.dp)) }
+                    }
+
+                    if (activeAlarmsOnDay.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "⏰ ACTIVE ALARMS FOR THIS DAY",
+                                fontFamily = fontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                        items(activeAlarmsOnDay) { alarm ->
+                            AriseAlarmCard(
+                                viewModel = alarmViewModel,
+                                alarm = alarm,
+                                colors = colors,
+                                fontFamily = fontFamily,
+                                onEditClick = {
+                                    alarmToEdit = alarm
+                                    showEditAlarm = true
+                                }
+                            )
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(110.dp))
                     }
                 }
             }
@@ -314,7 +559,7 @@ fun AriseCalendarTab(
 
         // Floating Action Button to book directly on the selected date
         FloatingActionButton(
-            onClick = { showAddEvent = true },
+            onClick = { showAddChoiceDialog = true },
             containerColor = colors.primary,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -322,6 +567,59 @@ fun AriseCalendarTab(
                 .testTag("add_event_fab")
         ) {
             Icon(Icons.Default.Add, contentDescription = "Book event for selected day", tint = colors.onPrimary)
+        }
+
+        if (showAddChoiceDialog) {
+            Dialog(onDismissRequest = { showAddChoiceDialog = false }) {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.surface),
+                    border = BorderStroke(1.dp, colors.cardBorder),
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "CHOOSE PLANNER TYPE",
+                            fontFamily = fontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = colors.primary
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                showAddChoiceDialog = false
+                                showAddEvent = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = colors.onPrimary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Book Calendar Event", color = colors.onPrimary, fontFamily = fontFamily)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                showAddChoiceDialog = false
+                                showAddAlarmDirect = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.secondary),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Alarm, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Create Specific Alarm", color = Color.White, fontFamily = fontFamily)
+                        }
+                    }
+                }
+            }
         }
 
         if (showAddEvent) {
@@ -335,6 +633,156 @@ fun AriseCalendarTab(
                 prefillYear = currentYear
             )
         }
+
+        if (showAddAlarmDirect) {
+            AriseAlarmDesignerDialog(
+                viewModel = alarmViewModel,
+                colors = colors,
+                fontFamily = fontFamily,
+                onDismiss = { showAddAlarmDirect = false }
+            )
+        }
+
+        if (showEditEvent && eventToEdit != null) {
+            AriseEventDesignerDialog(
+                viewModel = viewModel,
+                colors = colors,
+                fontFamily = fontFamily,
+                onDismiss = { showEditEvent = false; eventToEdit = null },
+                prefillDay = selectedDay,
+                prefillMonth = currentMonth,
+                prefillYear = currentYear,
+                eventToEdit = eventToEdit
+            )
+        }
+
+        if (showEditAlarm && alarmToEdit != null) {
+            AriseAlarmDesignerDialog(
+                viewModel = alarmViewModel,
+                colors = colors,
+                fontFamily = fontFamily,
+                alarmToEdit = alarmToEdit,
+                onDismiss = { showEditAlarm = false; alarmToEdit = null }
+            )
+        }
+
+        if (showYearNavigator) {
+            AriseYearNavigatorDialog(
+                colors = colors,
+                fontFamily = fontFamily,
+                initialYear = currentYear,
+                initialMonth = currentMonth,
+                eventsList = eventsList,
+                onMonthYearSelected = { month, year ->
+                    currentMonth = month
+                    currentYear = year
+                    selectedDay = 1 // reset to first of month on jump
+                    showYearNavigator = false
+                },
+                onDismiss = { showYearNavigator = false }
+            )
+        }
+
+        // Google Sync Settings Credential Dialog
+        if (showGoogleSyncDialog) {
+            Dialog(onDismissRequest = { showGoogleSyncDialog = false }) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.surface),
+                    border = BorderStroke(1.dp, colors.cardBorder)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Connect Google Calendar",
+                                fontFamily = fontFamily,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary
+                            )
+                            IconButton(onClick = { showGoogleSyncDialog = false }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = colors.onSurface.copy(alpha = 0.5f))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "To synchronize live events, paste your Google OAuth Access Token below.",
+                            fontFamily = fontFamily,
+                            fontSize = 12.sp,
+                            color = colors.onSurface.copy(alpha = 0.7f)
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = tokenInputText,
+                            onValueChange = { tokenInputText = it },
+                            label = { Text("Paste Google OAuth Token", color = colors.onSurface.copy(alpha = 0.6f)) },
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("google_token_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Don't have a token? Tap below to pre-populate with the high-fidelity Sandbox Simulation Feed.",
+                            fontFamily = fontFamily,
+                            fontSize = 11.sp,
+                            color = colors.onSurface.copy(alpha = 0.5f)
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    tokenInputText = "demo_mode"
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primary),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("btn_use_demo_token")
+                            ) {
+                                Text("Use Sandbox", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    viewModel.syncWithGoogleCalendar(tokenInputText)
+                                    showGoogleSyncDialog = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("btn_save_google_token")
+                        ) {
+                            Text("Save & Sync", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.onPrimary)
+                        }
+                    }
+                }
+            }
+        }
+    }
     }
 }
 
@@ -343,7 +791,8 @@ fun AriseEventCard(
     viewModel: CalendarViewModel,
     event: CalendarEvent,
     colors: CustomColorScheme,
-    fontFamily: FontFamily
+    fontFamily: FontFamily,
+    onEditClick: ((CalendarEvent) -> Unit)? = null
 ) {
     Card(
         modifier = Modifier
@@ -360,7 +809,10 @@ fun AriseEventCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     val labelColor = remember(event.colorHex) {
                         try {
                             Color(android.graphics.Color.parseColor(event.colorHex))
@@ -380,15 +832,27 @@ fun AriseEventCard(
                         fontFamily = fontFamily,
                         color = colors.onSurface,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
+                        fontSize = 15.sp,
+                        maxLines = 1
                     )
                 }
 
-                IconButton(
-                    onClick = { viewModel.deleteEvent(event) },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete event", tint = Color.Red.copy(alpha = 0.7f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onEditClick != null) {
+                        IconButton(
+                            onClick = { onEditClick(event) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit event", tint = colors.primary.copy(alpha = 0.8f))
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    IconButton(
+                        onClick = { viewModel.deleteEvent(event) },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete event", tint = Color.Red.copy(alpha = 0.7f))
+                    }
                 }
             }
 
@@ -442,6 +906,51 @@ fun AriseEventCard(
                         fontWeight = FontWeight.Bold
                     )
                 }
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val cal = Calendar.getInstance().apply { timeInMillis = event.startTime }
+                        val alarmHour = cal.get(Calendar.HOUR_OF_DAY)
+                        val alarmMinute = cal.get(Calendar.MINUTE)
+
+                        viewModel.linkAlarmToEvent(
+                            event,
+                            Alarm(
+                                label = "⏰ Google: ${event.title.take(15)}",
+                                description = "Wake-up alarm synced with event starting at ${String.format("%02d:%02d", alarmHour, alarmMinute)}",
+                                hour = alarmHour,
+                                minute = alarmMinute,
+                                repeatDays = "One-time",
+                                emoji = "⏰",
+                                snoozeEnabled = true,
+                                snoozeDurationMinutes = 5,
+                                snoozeLimit = 3
+                            )
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryContainer),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .height(32.dp)
+                        .testTag("link_alarm_${event.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Alarm,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Link Wakeup Alarm",
+                        fontFamily = fontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.primary
+                    )
+                }
             }
         }
     }
@@ -455,15 +964,34 @@ fun AriseEventDesignerDialog(
     onDismiss: () -> Unit,
     prefillDay: Int,
     prefillMonth: Int,
-    prefillYear: Int
+    prefillYear: Int,
+    eventToEdit: CalendarEvent? = null
 ) {
-    var title by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var startHour by remember { mutableStateOf(9) }
-    var durationMins by remember { mutableStateOf(60) }
-    var category by remember { mutableStateOf("Work") }
-    var colorHex by remember { mutableStateOf("#4CAF50") }
-    var priority by remember { mutableStateOf("High") }
+    var title by remember { mutableStateOf(eventToEdit?.title ?: "") }
+    var notes by remember { mutableStateOf(eventToEdit?.notes ?: "") }
+    
+    val initialStartHour = remember(eventToEdit) {
+        if (eventToEdit != null) {
+            val cal = Calendar.getInstance().apply { timeInMillis = eventToEdit.startTime }
+            cal.get(Calendar.HOUR_OF_DAY)
+        } else {
+            9
+        }
+    }
+    var startHour by remember { mutableStateOf(initialStartHour) }
+    
+    val initialDuration = remember(eventToEdit) {
+        if (eventToEdit != null) {
+            ((eventToEdit.endTime - eventToEdit.startTime) / 60000L).toInt()
+        } else {
+            60
+        }
+    }
+    var durationMins by remember { mutableStateOf(initialDuration) }
+    
+    var category by remember { mutableStateOf(eventToEdit?.category ?: "Work") }
+    var colorHex by remember { mutableStateOf(eventToEdit?.colorHex ?: "#4CAF50") }
+    var priority by remember { mutableStateOf(eventToEdit?.priority ?: "High") }
     
     // Custom Alarm options
     val reminderOptions = listOf(
@@ -472,7 +1000,21 @@ fun AriseEventDesignerDialog(
         "Ringing Alarm (15m before)" to "15m",
         "Ringing Alarm (30m before)" to "30m"
     )
-    var selectedReminderStyle by remember { mutableStateOf("Exact") }
+    
+    val initialReminderStyle = remember(eventToEdit) {
+        if (eventToEdit != null) {
+            if ((eventToEdit.linkedAlarmId ?: 0) > 0) {
+                if (eventToEdit.prepTimeMinutes == 15) "15m"
+                else if (eventToEdit.prepTimeMinutes == 30) "30m"
+                else "Exact"
+            } else {
+                "None"
+            }
+        } else {
+            "Exact"
+        }
+    }
+    var selectedReminderStyle by remember { mutableStateOf(initialReminderStyle) }
 
     val monthsLabels = listOf(
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -643,9 +1185,39 @@ fun AriseEventDesignerDialog(
                             val startMs = startCal.timeInMillis
                             val endMs = startMs + (durationMins * 60000L)
 
-                            val autoAlarmLinkedId = if (selectedReminderStyle != "None") 1000 + startHour else 0
+                            val autoAlarmLinkedId = if (selectedReminderStyle != "None") {
+                                eventToEdit?.linkedAlarmId ?: (1000 + startHour + (System.currentTimeMillis().toInt() % 10000))
+                            } else {
+                                null
+                            }
 
-                            viewModel.insertEvent(
+                            // If reminder type changed to "None" and they had an alarm, let's delete it
+                            if (selectedReminderStyle == "None" && eventToEdit?.linkedAlarmId != null) {
+                                viewModel.deleteAlarm(
+                                    Alarm(
+                                        id = eventToEdit.linkedAlarmId,
+                                        label = "",
+                                        description = "",
+                                        hour = 0,
+                                        minute = 0,
+                                        repeatDays = ""
+                                    )
+                                )
+                            }
+
+                            val eventToSave = if (eventToEdit != null) {
+                                eventToEdit.copy(
+                                    title = title,
+                                    notes = notes,
+                                    startTime = startMs,
+                                    endTime = endMs,
+                                    category = category,
+                                    colorHex = colorHex,
+                                    priority = priority,
+                                    linkedAlarmId = autoAlarmLinkedId,
+                                    prepTimeMinutes = if (selectedReminderStyle == "15m") 15 else if (selectedReminderStyle == "30m") 30 else 0
+                                )
+                            } else {
                                 CalendarEvent(
                                     title = title,
                                     notes = notes,
@@ -658,9 +1230,11 @@ fun AriseEventDesignerDialog(
                                     linkedAlarmId = autoAlarmLinkedId,
                                     prepTimeMinutes = if (selectedReminderStyle == "15m") 15 else if (selectedReminderStyle == "30m") 30 else 0
                                 )
-                            )
+                            }
 
-                            // Programmatically add a real single-time alarm into Room database!
+                            viewModel.insertEvent(eventToSave)
+
+                            // Programmatically add or update the real single-time alarm into Room database!
                             if (selectedReminderStyle != "None") {
                                 val alarmHour: Int
                                 val alarmMinute: Int
@@ -679,8 +1253,9 @@ fun AriseEventDesignerDialog(
                                     }
                                 }
 
-                                viewModel.insertAlarm(
+                                viewModel.updateAlarm(
                                     Alarm(
+                                        id = autoAlarmLinkedId ?: 0,
                                         label = "📅 Event: $title",
                                         description = "Created automatically from calendar agenda.",
                                         hour = alarmHour,
@@ -705,6 +1280,219 @@ fun AriseEventDesignerDialog(
                     ) {
                         Text("Book & Sync", color = colors.onPrimary, fontFamily = fontFamily, fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AriseYearNavigatorDialog(
+    colors: CustomColorScheme,
+    fontFamily: FontFamily,
+    initialYear: Int,
+    initialMonth: Int,
+    eventsList: List<CalendarEvent>,
+    onMonthYearSelected: (month: Int, year: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var tempYear by remember { mutableStateOf(initialYear) }
+    val monthsLabels = listOf(
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    )
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = BorderStroke(1.dp, colors.cardBorder),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .testTag("year_navigator_dialog")
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "YEAR NAVIGATION DECK",
+                    fontFamily = fontFamily,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary.copy(alpha = 0.8f),
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Year Switcher Header Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = { tempYear -= 5 },
+                        modifier = Modifier.size(36.dp).testTag("btn_prev_5_years")
+                    ) {
+                        Text(
+                            text = "«",
+                            color = colors.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            fontFamily = fontFamily
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { tempYear -= 1 },
+                        modifier = Modifier.size(36.dp).testTag("btn_prev_year")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ChevronLeft,
+                            contentDescription = "Previous Year",
+                            tint = colors.primary
+                        )
+                    }
+
+                    Text(
+                        text = "$tempYear",
+                        fontFamily = fontFamily,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = colors.primary,
+                        modifier = Modifier.testTag("navigator_current_year")
+                    )
+
+                    IconButton(
+                        onClick = { tempYear += 1 },
+                        modifier = Modifier.size(36.dp).testTag("btn_next_year")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Next Year",
+                            tint = colors.primary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { tempYear += 5 },
+                        modifier = Modifier.size(36.dp).testTag("btn_next_5_years")
+                    ) {
+                        Text(
+                            text = "»",
+                            color = colors.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            fontFamily = fontFamily
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // 3x4 Grid of months
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    for (row in 0 until 4) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            for (col in 0 until 3) {
+                                val monthIdx = row * 3 + col
+                                val isSelectedMonth = monthIdx == initialMonth && tempYear == initialYear
+
+                                // Calculate events in this specific month & year
+                                val eventCount = remember(eventsList, tempYear, monthIdx) {
+                                    val startCal = Calendar.getInstance().apply {
+                                        set(Calendar.YEAR, tempYear)
+                                        set(Calendar.MONTH, monthIdx)
+                                        set(Calendar.DAY_OF_MONTH, 1)
+                                        set(Calendar.HOUR_OF_DAY, 0)
+                                        set(Calendar.MINUTE, 0)
+                                        set(Calendar.SECOND, 0)
+                                        set(Calendar.MILLISECOND, 0)
+                                    }
+                                    val startMs = startCal.timeInMillis
+                                    val endCal = Calendar.getInstance().apply {
+                                        set(Calendar.YEAR, tempYear)
+                                        set(Calendar.MONTH, monthIdx)
+                                        val maxDay = getActualMaximum(Calendar.DAY_OF_MONTH)
+                                        set(Calendar.DAY_OF_MONTH, maxDay)
+                                        set(Calendar.HOUR_OF_DAY, 23)
+                                        set(Calendar.MINUTE, 59)
+                                        set(Calendar.SECOND, 59)
+                                        set(Calendar.MILLISECOND, 999)
+                                    }
+                                    val endMs = endCal.timeInMillis
+                                    eventsList.filter { it.startTime >= startMs && it.startTime <= endMs }.size
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(58.dp)
+                                        .clickable {
+                                            onMonthYearSelected(monthIdx, tempYear)
+                                        }
+                                        .testTag("month_btn_$monthIdx"),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(
+                                        width = if (isSelectedMonth) 2.dp else 1.dp,
+                                        color = if (isSelectedMonth) colors.primary else colors.cardBorder
+                                    ),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelectedMonth) colors.primary.copy(alpha = 0.12f) else colors.surface.copy(alpha = 0.3f)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = monthsLabels[monthIdx],
+                                            fontFamily = fontFamily,
+                                            fontWeight = if (isSelectedMonth) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 13.sp,
+                                            color = if (isSelectedMonth) colors.primary else colors.onSurface
+                                        )
+                                        if (eventCount > 0) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(colors.primary, CircleShape)
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    text = "$eventCount",
+                                                    fontFamily = fontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 8.sp,
+                                                    color = colors.onPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag("btn_close_year_navigator")
+                ) {
+                    Text(
+                        text = "Close",
+                        color = colors.primary,
+                        fontFamily = fontFamily,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

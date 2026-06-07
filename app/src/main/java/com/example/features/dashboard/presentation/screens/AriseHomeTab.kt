@@ -563,5 +563,6 @@ fun AriseHomeTab(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(88.dp))
     }
 }
