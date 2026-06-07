@@ -31,6 +31,8 @@ import com.example.core.database.Alarm
 import com.example.core.designsystem.CustomColorScheme
 import com.example.features.alarms.presentation.viewmodel.AlarmViewModel
 import androidx.compose.ui.platform.LocalContext
+import com.example.core.alarm.AriseAlarmService
+import android.content.Intent
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -44,74 +46,30 @@ fun AriseAlarmTriggeredScreen(
     val localAlarm = alarm ?: return
 
     val context = LocalContext.current
-    var isRinging by remember { mutableStateOf(false) }
-    var mediaPlayerInstance by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
 
     DisposableEffect(localAlarm.id) {
-        val player = android.media.MediaPlayer()
+        val startServiceIntent = Intent(context, AriseAlarmService::class.java).apply {
+            action = AriseAlarmService.ACTION_START_ALARM
+            putExtra(AriseAlarmService.EXTRA_ALARM_ID, localAlarm.id)
+            putExtra(AriseAlarmService.EXTRA_SOUND_PATH, localAlarm.soundPath)
+            putExtra(AriseAlarmService.EXTRA_SOUND_START_MS, localAlarm.soundStartMs)
+            putExtra(AriseAlarmService.EXTRA_SOUND_END_MS, localAlarm.soundEndMs)
+            putExtra(AriseAlarmService.EXTRA_GRADUAL_VOLUME, localAlarm.gradualVolume)
+        }
         try {
-            val alertUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
-                ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
-
-            if (localAlarm.soundPath != null) {
-                player.setDataSource(context, android.net.Uri.parse(localAlarm.soundPath))
-            } else {
-                player.setDataSource(context, alertUri)
-            }
-            player.setAudioAttributes(
-                android.media.AudioAttributes.Builder()
-                    .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            player.prepare()
-            
-            val startPosMs = (localAlarm.soundStartMs * 1000).coerceAtLeast(0)
-            player.seekTo(startPosMs)
-            player.start()
-            mediaPlayerInstance = player
-            isRinging = true
+            context.startService(startServiceIntent)
         } catch (e: Exception) {
-            try {
-                val fallbackUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
-                val fallbackPlayer = android.media.MediaPlayer.create(context, fallbackUri)
-                fallbackPlayer?.isLooping = true
-                fallbackPlayer?.start()
-                mediaPlayerInstance = fallbackPlayer
-                isRinging = true
-            } catch (ex: Exception) {}
+            android.util.Log.e("TriggeredScreen", "Fail starting sound service", e)
         }
 
         onDispose {
-            isRinging = false
+            val stopServiceIntent = Intent(context, AriseAlarmService::class.java).apply {
+                action = AriseAlarmService.ACTION_STOP_ALARM
+            }
             try {
-                mediaPlayerInstance?.let {
-                    if (it.isPlaying) {
-                        it.stop()
-                    }
-                    it.release()
-                }
-            } catch (e: Exception) {}
-            mediaPlayerInstance = null
-        }
-    }
-
-    LaunchedEffect(localAlarm.id, isRinging) {
-        if (isRinging) {
-            val startPosMs = (localAlarm.soundStartMs * 1000).coerceAtLeast(0)
-            val endPosMs = (localAlarm.soundEndMs * 1000).coerceAtLeast(startPosMs + 2000)
-            while (isRinging) {
-                try {
-                    mediaPlayerInstance?.let { player ->
-                        if (player.isPlaying) {
-                            val currentPos = player.currentPosition
-                            if (currentPos >= endPosMs || currentPos < startPosMs) {
-                                player.seekTo(startPosMs)
-                            }
-                        }
-                    }
-                } catch (e: Exception) {}
-                kotlinx.coroutines.delay(200)
+                context.startService(stopServiceIntent)
+            } catch (e: Exception) {
+                android.util.Log.e("TriggeredScreen", "Fail stopping sound service", e)
             }
         }
     }

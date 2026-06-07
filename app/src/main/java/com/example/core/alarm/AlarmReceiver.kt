@@ -54,7 +54,22 @@ class AlarmReceiver : BroadcastReceiver() {
                         val db = AriseDatabase.getDatabase(context)
                         val alarm = db.ariseDao().getAlarmById(alarmId)
                         if (alarm != null && alarm.isActive) {
-                            Log.d(TAG, "Alarm active. Showing notification & bringing MainActivity to screen.")
+                            Log.d(TAG, "Alarm active. Starting AriseAlarmService, showing notification & bringing MainActivity to screen.")
+                            
+                            try {
+                                val serviceIntent = Intent(context, AriseAlarmService::class.java).apply {
+                                    setAction(AriseAlarmService.ACTION_START_ALARM)
+                                    putExtra(AriseAlarmService.EXTRA_ALARM_ID, alarmId)
+                                    putExtra(AriseAlarmService.EXTRA_SOUND_PATH, alarm.soundPath)
+                                    putExtra(AriseAlarmService.EXTRA_SOUND_START_MS, alarm.soundStartMs)
+                                    putExtra(AriseAlarmService.EXTRA_SOUND_END_MS, alarm.soundEndMs)
+                                    putExtra(AriseAlarmService.EXTRA_GRADUAL_VOLUME, alarm.gradualVolume)
+                                }
+                                context.startService(serviceIntent)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to start AriseAlarmService", e)
+                            }
+
                             showHeadsUpNotificationAndWake(context, alarmId, alarm.label, alarm.challengeType)
                         } else {
                             Log.d(TAG, "Alarm was deleted, inactive or not found: $alarmId")
