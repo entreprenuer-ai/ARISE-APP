@@ -5,8 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.core.alarm.AlarmScheduler
 import com.example.core.network.SupabaseClient
-import com.example.data.*
+import com.example.core.database.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -555,6 +556,7 @@ class AriseViewModel(
 
     init {
         loadSettingsFromDb()
+        rescheduleActiveAlarmsOnStart()
     }
 
     private fun loadSettingsFromDb() {
@@ -633,19 +635,51 @@ class AriseViewModel(
 
     // --- Alarm Engine Functions ---
     fun insertAlarm(alarm: Alarm) = viewModelScope.launch {
-        repository.insertAlarm(alarm)
+        val id = repository.insertAlarm(alarm)
+        val savedAlarm = alarm.copy(id = id.toInt())
+        AlarmScheduler.scheduleAlarm(getApplication(), savedAlarm)
     }
 
     fun deleteAlarm(alarm: Alarm) = viewModelScope.launch {
         repository.deleteAlarm(alarm)
+        AlarmScheduler.cancelAlarm(getApplication(), alarm)
     }
 
     fun toggleAlarmActive(alarm: Alarm) = viewModelScope.launch {
-        repository.updateAlarmStatus(alarm.id, !alarm.isActive)
+        val newStatus = !alarm.isActive
+        repository.updateAlarmStatus(alarm.id, newStatus)
+        val updatedAlarm = alarm.copy(isActive = newStatus)
+        AlarmScheduler.scheduleAlarm(getApplication(), updatedAlarm)
     }
 
     fun updateAlarm(alarm: Alarm) = viewModelScope.launch {
         repository.insertAlarm(alarm)
+        AlarmScheduler.scheduleAlarm(getApplication(), alarm)
+    }
+
+    private fun rescheduleActiveAlarmsOnStart() {
+        viewModelScope.launch {
+            try {
+                repository.getActiveAlarmsSync().forEach { alarm ->
+                    AlarmScheduler.scheduleAlarm(getApplication(), alarm)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun handleTriggeredAlarmFromIntent(alarmId: Int) {
+        viewModelScope.launch {
+            try {
+                val alarm = repository.getAlarmById(alarmId)
+                if (alarm != null && alarm.isActive) {
+                    simulateAlarmTrigger(alarm)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     // --- Habits Engine ---
@@ -1487,15 +1521,3 @@ enum class AriseTab {
     StatsCustomize
 }
 
-class AriseViewModelFactory(
-    private val application: Application,
-    private val repository: AriseRepository
-) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(AriseViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return AriseViewModel(application, repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}

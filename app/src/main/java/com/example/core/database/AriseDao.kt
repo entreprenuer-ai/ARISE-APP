@@ -13,6 +13,9 @@ interface AriseDao {
     @Query("SELECT * FROM alarms WHERE id = :id")
     suspend fun getAlarmById(id: Int): Alarm?
 
+    @Query("SELECT * FROM alarms WHERE isActive = 1")
+    suspend fun getActiveAlarmsSync(): List<Alarm>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAlarm(alarm: Alarm): Long
 

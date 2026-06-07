@@ -9,6 +9,8 @@ class AriseRepository(private val ariseDao: AriseDao) {
 
     suspend fun getAlarmById(id: Int): Alarm? = ariseDao.getAlarmById(id)
 
+    suspend fun getActiveAlarmsSync(): List<Alarm> = ariseDao.getActiveAlarmsSync()
+
     suspend fun insertAlarm(alarm: Alarm): Long = ariseDao.insertAlarm(alarm)
 
     suspend fun deleteAlarm(alarm: Alarm) = ariseDao.deleteAlarm(alarm)
