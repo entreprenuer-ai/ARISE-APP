@@ -27,6 +27,9 @@ import com.example.core.database.CalendarEvent
 import com.example.core.designsystem.CustomColorScheme
 import com.example.features.calendar.presentation.viewmodel.CalendarViewModel
 import com.example.features.alarms.presentation.viewmodel.AlarmViewModel
+import com.example.features.calendar.presentation.viewmodel.SmartAlarmViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
 import com.example.features.alarms.presentation.screens.AriseAlarmCard
 import com.example.features.alarms.presentation.screens.AriseAlarmDesignerDialog
 import java.text.SimpleDateFormat
@@ -37,7 +40,8 @@ fun AriseCalendarTab(
     viewModel: CalendarViewModel,
     alarmViewModel: AlarmViewModel,
     colors: CustomColorScheme,
-    fontFamily: FontFamily
+    fontFamily: FontFamily,
+    smartAlarmViewModel: SmartAlarmViewModel = viewModel()
 ) {
     val eventsList by viewModel.events.collectAsState()
     val alarmsList by viewModel.alarms.collectAsState()
@@ -57,6 +61,16 @@ fun AriseCalendarTab(
     val isSyncing by viewModel.isSyncing.collectAsState()
     var showGoogleSyncDialog by remember { mutableStateOf(false) }
     var tokenInputText by remember { mutableStateOf("") }
+
+    // Smart Alarm State Collections
+    val context = LocalContext.current
+    val smartBufferMinutes by smartAlarmViewModel.bufferMinutes.collectAsState()
+    val smartAutoAdjust by smartAlarmViewModel.autoAdjustEnabled.collectAsState()
+    val smartMasterDefaultTime by smartAlarmViewModel.masterDefaultAlarmTime.collectAsState()
+    val smartCalculationResult by smartAlarmViewModel.calculationResult.collectAsState()
+    val smartIsCalculating by smartAlarmViewModel.isCalculating.collectAsState()
+    val smartIsSaving by smartAlarmViewModel.isSaving.collectAsState()
+    val smartStatusText by smartAlarmViewModel.smartAlarmStatusText.collectAsState()
 
     // Calendar navigation states
     val calendarInstance = remember { Calendar.getInstance() }
@@ -229,6 +243,486 @@ fun AriseCalendarTab(
                                     fontWeight = FontWeight.Bold,
                                     color = colors.onPrimary
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+
+            var isSmartExpanded by remember { mutableStateOf(false) }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .testTag("smart_alarm_calculator_card"),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.cardBorder),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Header Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isSmartExpanded = !isSmartExpanded },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = null,
+                                tint = colors.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "SMART WAKE CALCULATOR",
+                                fontFamily = fontFamily,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primary
+                            )
+                        }
+                        IconButton(
+                            onClick = { isSmartExpanded = !isSmartExpanded },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isSmartExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (isSmartExpanded) "Collapse" else "Expand",
+                                tint = colors.primary
+                            )
+                        }
+                    }
+
+                    if (isSmartExpanded) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            text = "Arise links your Calendar and Alarm engines to calculate your optimal sleep window.",
+                            fontFamily = fontFamily,
+                            fontSize = 11.sp,
+                            color = colors.onBackground.copy(alpha = 0.7f)
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Switch & Settings Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Auto-Schedule Smart Alarm",
+                                    fontFamily = fontFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onSurface
+                                )
+                                Text(
+                                    text = "Auto adjusts the smart alarm when calendar changes are detected.",
+                                    fontFamily = fontFamily,
+                                    fontSize = 10.sp,
+                                    color = colors.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                            Switch(
+                                checked = smartAutoAdjust,
+                                onCheckedChange = { smartAlarmViewModel.toggleAutoAdjust(it) },
+                                modifier = Modifier.testTag("switch_auto_adjust_smart_alarm")
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Master Default Alarm Setup Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Master Default Alarm",
+                                    fontFamily = fontFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onSurface
+                                )
+                                Text(
+                                    text = "Fallback wake time if no calendar events are found.",
+                                    fontFamily = fontFamily,
+                                    fontSize = 10.sp,
+                                    color = colors.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                            
+                            var isEditingTime by remember { mutableStateOf(false) }
+                            var editingTimeText by remember { mutableStateOf(smartMasterDefaultTime) }
+                            
+                            if (isEditingTime) {
+                                OutlinedTextField(
+                                    value = editingTimeText,
+                                    onValueChange = { editingTimeText = it },
+                                    modifier = Modifier
+                                        .width(95.dp)
+                                        .height(48.dp)
+                                        .testTag("input_master_default_alarm"),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        fontFamily = fontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    ),
+                                    singleLine = true,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                    ),
+                                    trailingIcon = {
+                                        IconButton(
+                                            onClick = {
+                                                if (editingTimeText.matches(Regex("^[0-2][0-9]:[0-5][0-9]$"))) {
+                                                    smartAlarmViewModel.setMasterDefaultAlarmTime(editingTimeText)
+                                                    isEditingTime = false
+                                                }
+                                            },
+                                            modifier = Modifier.size(16.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Save time",
+                                                tint = colors.primary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                )
+                            } else {
+                                FilterChip(
+                                    selected = true,
+                                    onClick = {
+                                        editingTimeText = smartMasterDefaultTime
+                                        isEditingTime = true
+                                    },
+                                    label = {
+                                        Text(
+                                            text = smartMasterDefaultTime,
+                                            fontFamily = fontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = colors.primaryContainer,
+                                        selectedLabelColor = colors.onSurface
+                                    ),
+                                    trailingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Edit default time",
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    },
+                                    modifier = Modifier.testTag("btn_edit_master_default_alarm")
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Buffer Time Set
+                        Text(
+                            text = "Wake Buffer: $smartBufferMinutes minutes before first event",
+                            fontFamily = fontFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primary
+                        )
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(45, 60, 90, 120).forEach { mins ->
+                                val isSelected = (smartBufferMinutes == mins)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { smartAlarmViewModel.setBufferMinutes(mins) },
+                                    label = { Text("$mins m", fontFamily = fontFamily, fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = colors.primary,
+                                        selectedLabelColor = colors.onPrimary
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("chip_buffer_$mins")
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Real-Time Dynamic Wake-up Status Badge
+                        if (smartCalculationResult != null) {
+                            val result = smartCalculationResult!!
+                            val badgeText = if (result.isFallback) {
+                                "Wake up at ${result.calculatedWakeTimeStr.substringAfter(", ")} (Default Alarm - No events tomorrow)"
+                            } else {
+                                "Wake up at ${result.calculatedWakeTimeStr.substringAfter(", ")} based on your '${result.nextDayEvent?.title}' event"
+                            }
+                            
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (result.isFallback) colors.surface else colors.primaryContainer
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (result.isFallback) colors.onSurface.copy(alpha = 0.15f) else colors.secondary.copy(alpha = 0.3f)
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                                    .testTag("smart_alarm_status_badge")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (result.isFallback) Icons.Default.Info else Icons.Default.NotificationsActive,
+                                        contentDescription = null,
+                                        tint = if (result.isFallback) colors.primary else colors.secondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = badgeText,
+                                        fontFamily = fontFamily,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Render Calculation Status Panel
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = colors.primaryContainer.copy(alpha = 0.15f)),
+                            border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.15f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                if (smartCalculationResult?.nextDayEvent != null) {
+                                    val result = smartCalculationResult!!
+                                    val event = result.nextDayEvent!!
+                                    
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Event,
+                                            contentDescription = null,
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Tomorrow's First Event (via ${event.source})",
+                                            fontFamily = fontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.primary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = event.title,
+                                        fontFamily = fontFamily,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+                                    Text(
+                                        text = "Starts At: ${result.originalEventTimeStr}",
+                                        fontFamily = fontFamily,
+                                        fontSize = 11.sp,
+                                        color = colors.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    HorizontalDivider(color = colors.primary.copy(alpha = 0.1f))
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Alarm,
+                                            contentDescription = null,
+                                            tint = colors.secondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Dynamic Wake-Up Time",
+                                            fontFamily = fontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.secondary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = result.calculatedWakeTimeStr,
+                                        fontFamily = fontFamily,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = colors.secondary
+                                    )
+                                } else if (smartCalculationResult?.isFallback == true) {
+                                    val result = smartCalculationResult!!
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "No Events Tomorrow (Fallback Active)",
+                                            fontFamily = fontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.primary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Using Master Default Alarm",
+                                        fontFamily = fontFamily,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+                                    Text(
+                                        text = "Configured fallback: $smartMasterDefaultTime",
+                                        fontFamily = fontFamily,
+                                        fontSize = 11.sp,
+                                        color = colors.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    HorizontalDivider(color = colors.primary.copy(alpha = 0.1f))
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Alarm,
+                                            contentDescription = null,
+                                            tint = colors.secondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Default Wake-Up Time",
+                                            fontFamily = fontFamily,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.secondary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = result.calculatedWakeTimeStr,
+                                        fontFamily = fontFamily,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = colors.secondary
+                                    )
+                                } else {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center,
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.NotificationsOff,
+                                            contentDescription = null,
+                                            tint = colors.onSurface.copy(alpha = 0.4f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "No Smart Calculator analysis performed yet.",
+                                            fontFamily = fontFamily,
+                                            fontSize = 11.sp,
+                                            color = colors.onSurface.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (smartStatusText.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = smartStatusText,
+                                fontFamily = fontFamily,
+                                fontSize = 11.sp,
+                                color = colors.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { smartAlarmViewModel.calculateSmartAlarm(context) },
+                                enabled = !smartIsCalculating,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("btn_analyse_smart_shedule")
+                            ) {
+                                if (smartIsCalculating) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Scan Event", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Button(
+                                onClick = { smartAlarmViewModel.saveAndScheduleSmartAlarm(context) },
+                                enabled = !smartIsSaving && smartCalculationResult?.calculatedHour != null,
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.secondary),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1.1f)
+                                    .height(44.dp)
+                                    .testTag("btn_save_smart_alarm")
+                            ) {
+                                if (smartIsSaving) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Apply Alarm", color = Color.White, fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }

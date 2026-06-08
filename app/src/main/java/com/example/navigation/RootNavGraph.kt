@@ -12,6 +12,7 @@ import com.example.features.calendar.presentation.viewmodel.CalendarViewModel
 import com.example.features.goals.presentation.viewmodel.GoalsViewModel
 import com.example.features.habits.presentation.viewmodel.HabitsViewModel
 import com.example.features.sleep.presentation.viewmodel.SleepViewModel
+import com.example.features.sleep.presentation.viewmodel.SleepTrackingViewModel
 import com.example.features.statistics.presentation.viewmodel.StatisticsViewModel
 import com.example.features.settings.presentation.viewmodel.SettingsViewModel
 import com.example.features.security.presentation.viewmodel.SecurityViewModel
@@ -30,6 +31,7 @@ fun RootNavGraph(
     goalsViewModel: GoalsViewModel,
     habitsViewModel: HabitsViewModel,
     sleepViewModel: SleepViewModel,
+    sleepTrackingViewModel: SleepTrackingViewModel,
     statisticsViewModel: StatisticsViewModel,
     settingsViewModel: SettingsViewModel,
     securityViewModel: SecurityViewModel,
@@ -66,6 +68,7 @@ fun RootNavGraph(
                 goalsViewModel = goalsViewModel,
                 habitsViewModel = habitsViewModel,
                 sleepViewModel = sleepViewModel,
+                sleepTrackingViewModel = sleepTrackingViewModel,
                 statisticsViewModel = statisticsViewModel,
                 settingsViewModel = settingsViewModel,
                 securityViewModel = securityViewModel,

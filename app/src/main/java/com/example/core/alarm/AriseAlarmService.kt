@@ -22,6 +22,11 @@ class AriseAlarmService : Service() {
     private var loopJob: Job? = null
     private var volumeJob: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main)
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: android.media.AudioFocusRequest? = null
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        Log.d(TAG, "Audio focus changed: $focusChange")
+    }
 
     companion object {
         private const val TAG = "AriseAlarmService"
@@ -70,6 +75,7 @@ class AriseAlarmService : Service() {
 
     private fun startAlarmPlayback(soundPath: String?, startSec: Int, endSec: Int, gradual: Boolean) {
         stopAlarmPlayback()
+        requestFocus()
 
         val context = applicationContext
         val player = MediaPlayer()
@@ -189,6 +195,54 @@ class AriseAlarmService : Service() {
             Log.e(TAG, "Error releasing MediaPlayer", e)
         }
         mediaPlayer = null
+        abandonFocus()
+    }
+
+    private fun requestFocus() {
+        try {
+            audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val focusRequest = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                    .build()
+                audioFocusRequest = focusRequest
+                val result = audioManager?.requestAudioFocus(focusRequest)
+                Log.d(TAG, "Exclusive audio focus requested (Oreo+). Result: $result")
+            } else {
+                @Suppress("DEPRECATION")
+                val result = audioManager?.requestAudioFocus(
+                    audioFocusChangeListener,
+                    AudioManager.STREAM_ALARM,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+                )
+                Log.d(TAG, "Exclusive audio focus requested (Pre-Oreo). Result: $result")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error requesting exclusive audio focus", e)
+        }
+    }
+
+    private fun abandonFocus() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                audioFocusRequest?.let {
+                    audioManager?.abandonAudioFocusRequest(it)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.abandonAudioFocus(audioFocusChangeListener)
+            }
+            Log.d(TAG, "Audio focus abandoned successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error abandoning audio focus", e)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? {

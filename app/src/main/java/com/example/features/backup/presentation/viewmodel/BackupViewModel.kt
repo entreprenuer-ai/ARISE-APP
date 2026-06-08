@@ -249,7 +249,8 @@ class BackupViewModel(
         _supabaseStatus.value = status
     }
 
-    suspend fun generateFullBackupJson(): String = withContext(Dispatchers.Default) {
+    suspend fun generateFullBackupJson(): String = withContext(Dispatchers.IO) {
+        repository.runCheckpoint()
         val backupRoot = JSONObject()
 
         val alarmsArr = JSONArray()

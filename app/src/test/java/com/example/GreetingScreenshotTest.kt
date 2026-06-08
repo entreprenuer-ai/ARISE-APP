@@ -29,9 +29,9 @@ class GreetingScreenshotTest {
   @Test
   fun arise_main_screen_screenshot() {
     val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
-    val database = com.example.data.AriseDatabase.getDatabase(context)
+    val database = com.example.core.database.AriseDatabase.getDatabase(context)
     val dao = database.ariseDao()
-    val repository = com.example.data.AriseRepository(dao)
+    val repository = com.example.core.database.AriseRepository(dao, database.sleepSessionDao())
     val app = context as android.app.Application
     val vm = com.example.ui.viewmodel.AriseViewModel(app, repository)
 

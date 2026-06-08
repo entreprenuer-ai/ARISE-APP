@@ -5,17 +5,46 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
-
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keepattributes SourceFile,LineNumberTable,Signature,InnerClasses,EnclosingMethod,*Annotation*
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# --- Room Database Rules ---
+-keep @androidx.room.Entity class * { *; }
+-keep @androidx.room.Dao interface * { *; }
+-keep @androidx.room.Database class * { *; }
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep class com.example.core.database.** { *; }
+
+# --- Kotlinx Serialization Rules ---
+-keepclassmembers class * {
+    @kotlinx.serialization.Serializable <fields>;
+}
+-keep @kotlinx.serialization.Serializable class * { *; }
+-keep class *$$serializer { *; }
+-keepclassmembers class * {
+    *** Companion;
+    *** \$serializer;
+}
+
+# --- Moshi Parser Rules ---
+-keep class com.squareup.moshi.** { *; }
+-dontwarn com.squareup.moshi.**
+-keep class *JsonAdapter { *; }
+-keep class *$$JsonAdapter { *; }
+
+# --- Retrofit Rules ---
+-dontwarn retrofit2.**
+-keep class retrofit2.** { *; }
+-keepclassmembernames interface * {
+    @retrofit2.http.* <methods>;
+}
+
+# --- Jetpack Compose, ViewModels & State Keep Rules ---
+-keepclassmembers class * extends androidx.lifecycle.ViewModel {
+    *** *;
+}
+-keep class * extends androidx.lifecycle.ViewModel { *; }
+-keep class * extends androidx.lifecycle.ViewModelProvider$Factory { *; }
+-keep class com.example.features.**.presentation.viewmodel.** { *; }
+

@@ -30,6 +30,8 @@ import com.example.features.calendar.presentation.viewmodel.CalendarViewModel
 import com.example.features.goals.presentation.viewmodel.GoalsViewModel
 import com.example.features.habits.presentation.viewmodel.HabitsViewModel
 import com.example.features.sleep.presentation.viewmodel.SleepViewModel
+import com.example.features.sleep.presentation.viewmodel.SleepTrackingViewModel
+import androidx.compose.material.icons.filled.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -40,6 +42,9 @@ fun AriseHomeTab(
     goalsViewModel: GoalsViewModel,
     habitsViewModel: HabitsViewModel,
     sleepViewModel: SleepViewModel,
+    sleepTrackingViewModel: SleepTrackingViewModel,
+    onNavigateToSleep: () -> Unit,
+    onNavigateToCalendar: () -> Unit,
     colors: CustomColorScheme,
     fontFamily: FontFamily
 ) {
@@ -49,10 +54,38 @@ fun AriseHomeTab(
     val sleepLogsList by sleepViewModel.sleepLogs.collectAsState()
     val habitsList by habitsViewModel.habits.collectAsState()
 
+    val sleepTargetHours by sleepTrackingViewModel.sleepTargetHours.collectAsState()
+    val sleepSessions by sleepTrackingViewModel.allSleepSessions.collectAsState()
+
+    // Find smart alarm in alarmsList
+    val smartAlarm = remember(alarmsList) {
+        alarmsList.find { it.category == "Smart" || it.label == "Smart Wake Alarm" }
+    }
+
+    // Rolling last 3 sleep sessions
+    val last3Sessions = remember(sleepSessions) {
+        sleepSessions.sortedByDescending { it.endTimeMillis }.take(3)
+    }
+
+    // Latest sleep session duration vs target
+    val latestSession = remember(sleepSessions) {
+        sleepSessions.firstOrNull()
+    }
+    val targetProgressPercent = remember(latestSession, sleepTargetHours) {
+        if (latestSession != null && sleepTargetHours > 0) {
+            val sleptMs = latestSession.endTimeMillis - latestSession.startTimeMillis
+            val sleptHours = sleptMs / 3600000.0f
+            ((sleptHours / sleepTargetHours) * 100).toInt().coerceIn(0, 100)
+        } else {
+            0
+        }
+    }
+
     // 1. Live ticking Clock State
     var currentTimeStr by remember { mutableStateOf("") }
     var currentDateStr by remember { mutableStateOf("") }
     var blinkState by remember { mutableStateOf(true) }
+    var showBatteryNotification by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -192,6 +225,352 @@ fun AriseHomeTab(
                         fontWeight = FontWeight.Bold,
                         color = colors.onSurface
                     )
+                }
+            }
+        }
+
+        // --- DIRECT ACTION SHORTCUTS ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = onNavigateToSleep,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("shortcut_to_sleep"),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.15f)),
+                border = BorderStroke(1.dp, colors.primary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Bedtime,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "SLEEP HUB",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary
+                )
+            }
+
+            Button(
+                onClick = onNavigateToCalendar,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("shortcut_to_calendar"),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.secondary.copy(alpha = 0.15f)),
+                border = BorderStroke(1.dp, colors.secondary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CalendarMonth,
+                    contentDescription = null,
+                    tint = colors.secondary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "BLUEPRINT",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.secondary
+                )
+            }
+        }
+
+        // --- BATTERY OPTIMIZATION GUIDE ---
+        if (showBatteryNotification) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .testTag("battery_optimization_card"),
+                colors = CardDefaults.cardColors(containerColor = colors.secondary.copy(alpha = 0.12f)),
+                border = BorderStroke(1.dp, colors.secondary.copy(alpha = 0.7f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BatteryAlert,
+                        contentDescription = "Battery Alert",
+                        tint = colors.secondary,
+                        modifier = Modifier
+                            .size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "SYSTEM LATENCY MINIMIZATION REQUIRED",
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = colors.secondary,
+                            letterSpacing = 0.8.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Set Arise to 'Unrestricted Battery Usage' in system settings. This prevents Android from halting the sleep tracking sub-routines and smart alarms overnight.",
+                            fontFamily = fontFamily,
+                            fontSize = 10.sp,
+                            color = colors.onSurface.copy(alpha = 0.85f),
+                            lineHeight = 13.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { showBatteryNotification = false },
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("dismiss_battery_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Dismiss",
+                            tint = colors.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- CYBERPUNK TELEMETRY HUB ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+                .testTag("cyberpunk_telemetry_hub"),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = BorderStroke(1.5.dp, colors.primary),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "Chrono Telemetry Logo",
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "CORE CYBER-TELEMETRY HARVESTER",
+                        fontFamily = FontFamily.Monospace,
+                        color = colors.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.5.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Split metrics: Smart Wake & Biometric Target
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Smart Wake Glance Card
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("telemetry_smart_wake_card"),
+                        colors = CardDefaults.cardColors(containerColor = colors.background.copy(alpha = 0.5f)),
+                        border = BorderStroke(1.dp, colors.divider),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "CHRONO-SYNAPSE WAKE",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.onSurface.copy(alpha = 0.6f)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            val isSmartActive = smartAlarm != null && smartAlarm.isActive
+                            Text(
+                                text = if (isSmartActive) "%02d:%02d".format(smartAlarm!!.hour, smartAlarm.minute) else "STANDBY / OFF",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (isSmartActive) colors.primary else colors.onSurface.copy(alpha = 0.4f)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (isSmartActive) {
+                                    if (smartAlarm!!.description.contains("Master Default", ignoreCase = true)) {
+                                        "MASTER FALLBACK ROUTINE"
+                                    } else {
+                                        "EVENT-OPTIMIZED SYNC"
+                                    }
+                                } else {
+                                    "No smart wake registered"
+                                },
+                                fontFamily = fontFamily,
+                                fontSize = 9.sp,
+                                color = colors.onSurface.copy(alpha = 0.5f),
+                                lineHeight = 12.sp
+                            )
+                        }
+                    }
+
+                    // Biometric Goal Sync Card
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("telemetry_biometric_goal_card"),
+                        colors = CardDefaults.cardColors(containerColor = colors.background.copy(alpha = 0.5f)),
+                        border = BorderStroke(1.dp, colors.divider),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "BIO-RECOVERY TARGET",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.onSurface.copy(alpha = 0.6f)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "$targetProgressPercent%",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (targetProgressPercent >= 100) colors.primary else colors.secondary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "$targetProgressPercent% of your ${sleepTargetHours}h biological target.",
+                                fontFamily = fontFamily,
+                                fontSize = 9.sp,
+                                color = colors.onSurface.copy(alpha = 0.5f),
+                                lineHeight = 12.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Rolling last 3 days of sleep history summary list
+                Text(
+                    text = "HISTORIC BIOMETRIC TELEMETRY (ROLLING 3-DAY)",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (last3Sessions.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.background.copy(alpha = 0.3f))
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Awaiting biometric telemetry logging...",
+                            fontFamily = fontFamily,
+                            fontSize = 11.sp,
+                            color = colors.onSurface.copy(alpha = 0.5f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        last3Sessions.forEach { session ->
+                            val sleptMs = session.endTimeMillis - session.startTimeMillis
+                            val sleptHours = sleptMs / 3600000.0f
+                            val sdf = SimpleDateFormat("MMM dd", Locale.getDefault())
+                            val dateStr = sdf.format(Date(session.endTimeMillis))
+                            val isDeficit = sleptHours < sleepTargetHours
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.background.copy(alpha = 0.4f))
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Bedtime,
+                                        contentDescription = null,
+                                        tint = if (isDeficit) colors.secondary else colors.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = dateStr,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "%.1fh Slept".format(sleptHours),
+                                        fontFamily = fontFamily,
+                                        fontSize = 11.sp,
+                                        color = colors.onSurface.copy(alpha = 0.8f)
+                                    )
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Quality: %.1f".format(session.sleepQualityRating),
+                                        fontFamily = fontFamily,
+                                        fontSize = 10.sp,
+                                        color = colors.onSurface.copy(alpha = 0.6f)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(
+                                                if (isDeficit) colors.secondary.copy(alpha = 0.15f)
+                                                else colors.primary.copy(alpha = 0.15f)
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isDeficit) "DEFICIT" else "OPTIMAL",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isDeficit) colors.secondary else colors.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

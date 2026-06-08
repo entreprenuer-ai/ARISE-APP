@@ -53,6 +53,7 @@ import com.example.features.calendar.presentation.viewmodel.CalendarViewModel
 import com.example.features.goals.presentation.viewmodel.GoalsViewModel
 import com.example.features.habits.presentation.viewmodel.HabitsViewModel
 import com.example.features.sleep.presentation.viewmodel.SleepViewModel
+import com.example.features.sleep.presentation.viewmodel.SleepTrackingViewModel
 import com.example.features.statistics.presentation.viewmodel.StatisticsViewModel
 import com.example.features.settings.presentation.viewmodel.SettingsViewModel
 import com.example.features.security.presentation.viewmodel.SecurityViewModel
@@ -86,6 +87,7 @@ fun AriseMainScreen(
     val settingsViewModel: SettingsViewModel = viewModel(factory = factory)
     val securityViewModel: SecurityViewModel = viewModel(factory = factory)
     val backupViewModel: BackupViewModel = viewModel(factory = factory)
+    val sleepTrackingViewModel: SleepTrackingViewModel = viewModel(factory = factory)
 
     val appSkin by settingsViewModel.appSkin.collectAsState()
     val accentColorHex by settingsViewModel.accentColorHex.collectAsState()
@@ -121,6 +123,7 @@ fun AriseMainScreen(
                         goalsViewModel = goalsViewModel,
                         habitsViewModel = habitsViewModel,
                         sleepViewModel = sleepViewModel,
+                        sleepTrackingViewModel = sleepTrackingViewModel,
                         statisticsViewModel = statisticsViewModel,
                         settingsViewModel = settingsViewModel,
                         securityViewModel = securityViewModel,

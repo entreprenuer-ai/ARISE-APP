@@ -1066,6 +1066,9 @@ class AriseViewModel(
     fun generateFullBackupJson() {
         viewModelScope.launch {
             try {
+                withContext(Dispatchers.IO) {
+                    repository.runCheckpoint()
+                }
                 val alarmsVal = alarms.value
                 val eventsVal = events.value
                 val goalsVal = goals.value
@@ -1317,6 +1320,7 @@ class AriseViewModel(
             _supabaseStatus.value = "Uploading backup to Supabase..."
             _showSqlSuggestion.value = false
             try {
+                repository.runCheckpoint()
                 val alarmsVal = alarms.value
                 val eventsVal = events.value
                 val goalsVal = goals.value

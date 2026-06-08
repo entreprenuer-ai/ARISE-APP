@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
 
         // 100% Secure Local Database & Repository Initialization
         val database = AriseDatabase.getDatabase(applicationContext)
-        val repository = AriseRepository(database.ariseDao())
+        val repository = AriseRepository(database.ariseDao(), database.sleepSessionDao(), database)
 
         // ViewModel Factory Initialization
         val factory = AriseViewModelFactory(application, repository)

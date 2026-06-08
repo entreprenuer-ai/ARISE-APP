@@ -17,15 +17,36 @@ import androidx.room.TypeConverters
         HabitCompletion::class,
         AlarmHistoryItem::class,
         Routine::class,
-        Challenge::class
+        Challenge::class,
+        SleepSession::class
     ],
-    version = 4, // Increment version because of new sound fields on core Alarm!
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(AriseTypeConverters::class)
 abstract class AriseDatabase : RoomDatabase() {
 
     abstract fun ariseDao(): AriseDao
+    abstract fun sleepSessionDao(): SleepSessionDao
+
+    fun checkpoint() {
+        try {
+            val query = androidx.sqlite.db.SimpleSQLiteQuery("PRAGMA wal_checkpoint(FULL)")
+            val cursor = openHelper.writableDatabase.query(query)
+            try {
+                if (cursor.moveToFirst()) {
+                    val busy = cursor.getInt(0)
+                    val log = cursor.getInt(1)
+                    val checkpointed = cursor.getInt(2)
+                    android.util.Log.d("AriseDatabase", "WAL checkpoint completed: busy=$busy, log=$log, checkpointed=$checkpointed")
+                }
+            } finally {
+                cursor.close()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AriseDatabase", "Error executing wal_checkpoint", e)
+        }
+    }
 
     companion object {
         @Volatile

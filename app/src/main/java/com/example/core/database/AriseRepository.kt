@@ -2,7 +2,15 @@ package com.example.core.database
 
 import kotlinx.coroutines.flow.Flow
 
-class AriseRepository(private val ariseDao: AriseDao) {
+class AriseRepository(
+    private val ariseDao: AriseDao,
+    private val sleepSessionDao: SleepSessionDao,
+    private val database: AriseDatabase? = null
+) {
+
+    fun runCheckpoint() {
+        database?.checkpoint()
+    }
 
     // --- ALARM ENGINE ---
     val allAlarms: Flow<List<Alarm>> = ariseDao.getAllAlarms()
@@ -47,6 +55,14 @@ class AriseRepository(private val ariseDao: AriseDao) {
     suspend fun insertSleepLog(log: SleepLog): Long = ariseDao.insertSleepLog(log)
 
     suspend fun deleteSleepLog(log: SleepLog) = ariseDao.deleteSleepLog(log)
+
+    val allSleepSessions: Flow<List<SleepSession>> = sleepSessionDao.getAllSleepSessions()
+
+    suspend fun insertSleepSession(session: SleepSession): Long = sleepSessionDao.insertSleepSession(session)
+
+    suspend fun updateSleepSession(session: SleepSession) = sleepSessionDao.updateSleepSession(session)
+
+    suspend fun deleteSleepSession(session: SleepSession) = sleepSessionDao.deleteSleepSession(session)
 
 
     // --- APP SETTINGS ---

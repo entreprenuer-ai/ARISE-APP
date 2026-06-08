@@ -18,6 +18,7 @@ import com.example.features.calendar.presentation.viewmodel.CalendarViewModel
 import com.example.features.goals.presentation.viewmodel.GoalsViewModel
 import com.example.features.habits.presentation.viewmodel.HabitsViewModel
 import com.example.features.sleep.presentation.viewmodel.SleepViewModel
+import com.example.features.sleep.presentation.viewmodel.SleepTrackingViewModel
 import com.example.features.statistics.presentation.viewmodel.StatisticsViewModel
 import com.example.features.settings.presentation.viewmodel.SettingsViewModel
 import com.example.features.security.presentation.viewmodel.SecurityViewModel
@@ -38,6 +39,7 @@ fun AriseMainDashboardScreen(
     goalsViewModel: GoalsViewModel,
     habitsViewModel: HabitsViewModel,
     sleepViewModel: SleepViewModel,
+    sleepTrackingViewModel: SleepTrackingViewModel,
     statisticsViewModel: StatisticsViewModel,
     settingsViewModel: SettingsViewModel,
     securityViewModel: SecurityViewModel,
@@ -74,6 +76,9 @@ fun AriseMainDashboardScreen(
                         goalsViewModel = goalsViewModel,
                         habitsViewModel = habitsViewModel,
                         sleepViewModel = sleepViewModel,
+                        sleepTrackingViewModel = sleepTrackingViewModel,
+                        onNavigateToSleep = { dashboardViewModel.setTab(AriseTab.Sleep) },
+                        onNavigateToCalendar = { dashboardViewModel.setTab(AriseTab.Calendar) },
                         colors = colors,
                         fontFamily = fontFamily
                     )
@@ -104,6 +109,7 @@ fun AriseMainDashboardScreen(
                 AriseTab.Sleep -> {
                     AriseSleepTab(
                         viewModel = sleepViewModel,
+                        sleepTrackingViewModel = sleepTrackingViewModel,
                         colors = colors,
                         fontFamily = fontFamily
                     )
