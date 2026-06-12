@@ -35,6 +35,26 @@ import kotlinx.coroutines.delay
 import com.example.core.designsystem.CustomColorScheme
 import com.example.features.alarms.presentation.viewmodel.AlarmViewModel
 
+private fun copyUriToLocalFilesDir(context: android.content.Context, uri: android.net.Uri): String? {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+        val folder = java.io.File(context.filesDir, "custom_sounds")
+        if (!folder.exists()) {
+            folder.mkdirs()
+        }
+        val extension = context.contentResolver.getType(uri)?.substringAfterLast("/") ?: "mp3"
+        val fileName = "sound_${System.currentTimeMillis()}.$extension"
+        val destinationFile = java.io.File(folder, fileName)
+        destinationFile.outputStream().use { outputStream ->
+            inputStream.copyTo(outputStream)
+        }
+        destinationFile.absolutePath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
 @Composable
 fun AriseAlarmsTab(
     viewModel: AlarmViewModel,
@@ -419,7 +439,8 @@ fun AriseAlarmDesignerDialog(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            soundPath = uri.toString()
+            val copiedPath = copyUriToLocalFilesDir(context, uri)
+            soundPath = copiedPath ?: uri.toString()
             val retriever = android.media.MediaMetadataRetriever()
             var detectedDurationSec = 30
             try {
@@ -716,7 +737,11 @@ fun AriseAlarmDesignerDialog(
                                                 ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
                                             
                                             if (soundPath != null) {
-                                                player.setDataSource(context, android.net.Uri.parse(soundPath))
+                                                if (soundPath!!.startsWith("/")) {
+                                                    player.setDataSource(soundPath!!)
+                                                } else {
+                                                    player.setDataSource(context, android.net.Uri.parse(soundPath!!))
+                                                }
                                             } else {
                                                 player.setDataSource(context, alertUri)
                                             }

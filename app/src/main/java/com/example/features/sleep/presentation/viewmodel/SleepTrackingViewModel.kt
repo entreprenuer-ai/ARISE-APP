@@ -287,4 +287,30 @@ class SleepTrackingViewModel(
             }
         }
     }
+
+    fun logManualSleepSession(startTimeMillis: Long, endTimeMillis: Long, rating: Float, notes: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val session = SleepSession(
+                    startTimeMillis = startTimeMillis,
+                    endTimeMillis = endTimeMillis,
+                    sleepQualityRating = rating,
+                    notes = notes
+                )
+                repository.insertSleepSession(session)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun updateSleepSession(session: SleepSession) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.insertSleepSession(session)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 }

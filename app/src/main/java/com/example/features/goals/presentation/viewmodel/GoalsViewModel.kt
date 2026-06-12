@@ -32,4 +32,29 @@ class GoalsViewModel(
     fun incrementGoalProgress(goal: Goal) = viewModelScope.launch {
         incrementGoalProgressUseCase(goal)
     }
+
+    fun incrementGoalDirectly(goal: Goal) = viewModelScope.launch {
+        val updatedProgress = (goal.currentProgress + 1).coerceAtMost(goal.targetProgress)
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        val checkInLong = todayStr.toLong()
+        val updatedStreak = if (updatedProgress >= goal.targetProgress && goal.lastCheckedDate != checkInLong) goal.streakCount + 1 else goal.streakCount
+        val updated = goal.copy(
+            currentProgress = updatedProgress,
+            streakCount = updatedStreak,
+            lastCheckedDate = if (updatedProgress >= goal.targetProgress) checkInLong else goal.lastCheckedDate
+        )
+        repository.insertGoal(updated)
+    }
+
+    fun resetGoalProgress(goal: Goal) = viewModelScope.launch {
+        val updated = goal.copy(currentProgress = 0)
+        repository.insertGoal(updated)
+    }
+
+    fun decrementGoalProgress(goal: Goal) = viewModelScope.launch {
+        if (goal.currentProgress > 0) {
+            val updated = goal.copy(currentProgress = goal.currentProgress - 1)
+            repository.insertGoal(updated)
+        }
+    }
 }

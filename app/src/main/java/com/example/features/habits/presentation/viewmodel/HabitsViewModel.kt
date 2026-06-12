@@ -18,6 +18,7 @@ class HabitsViewModel(
     private val createHabitUseCase = CreateHabitUseCase(repository)
     private val deleteHabitUseCase = DeleteHabitUseCase(repository)
     private val completeHabitUseCase = CompleteHabitUseCase(repository)
+    private val deleteHabitCompletionUseCase = com.example.features.habits.domain.usecase.DeleteHabitCompletionUseCase(repository)
 
     val habits: StateFlow<List<Habit>> = repository.allHabits
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -35,5 +36,9 @@ class HabitsViewModel(
 
     fun completeHabit(habitId: Int, notes: String = "") = viewModelScope.launch {
         completeHabitUseCase(habitId, notes)
+    }
+
+    fun deleteHabitCompletion(completion: HabitCompletion) = viewModelScope.launch {
+        deleteHabitCompletionUseCase(completion)
     }
 }

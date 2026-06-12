@@ -30,6 +30,9 @@ import java.util.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import androidx.compose.ui.text.TextStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +73,18 @@ fun AriseSleepTab(
     var telemetryJsonText by remember { mutableStateOf("") }
     var importJsonText by remember { mutableStateOf("") }
     var telemetryFeedbackText by remember { mutableStateOf("") }
+
+    // Manual Sleep Tracker States
+    var manualSleepDayOffset by remember { mutableStateOf(1) } // Default 1: Yesterday
+    var manualSleepHour by remember { mutableStateOf(23) } // Default 23 (11 PM)
+    var manualSleepMinute by remember { mutableStateOf(0) }
+    var manualWakeDayOffset by remember { mutableStateOf(0) } // Default 0: Today
+    var manualWakeHour by remember { mutableStateOf(7) } // Default 7 (7 AM)
+    var manualWakeMinute by remember { mutableStateOf(0) }
+    var manualSleepRating by remember { mutableStateOf(4f) }
+    var manualSleepNotes by remember { mutableStateOf("") }
+    var manualSaveSuccessText by remember { mutableStateOf("") }
+    var sleepSessionToEdit by remember { mutableStateOf<SleepSession?>(null) }
 
     // Coroutine effect for live tracking timer update
     LaunchedEffect(isTracking, trackingStartTime) {
@@ -378,6 +393,476 @@ fun AriseSleepTab(
             }
         }
 
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .testTag("manual_sleep_calculator_card"),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.cardBorder),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddAlarm,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "MANUAL REST LOG CALCULATOR",
+                            fontFamily = fontFamily,
+                            color = colors.primary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "BEDTIME (SLEEP START)",
+                        fontFamily = fontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.background)
+                                .padding(2.dp)
+                        ) {
+                            listOf(1 to "Yesterday", 0 to "Today").forEach { (offset, label) ->
+                                val isSelected = manualSleepDayOffset == offset
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSelected) colors.primary else Color.Transparent)
+                                        .clickable { manualSleepDayOffset = offset }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontFamily = fontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) colors.onPrimary else colors.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        Row(
+                            modifier = Modifier
+                                .weight(1.8f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.background)
+                                .padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            IconButton(
+                                onClick = { manualSleepHour = (manualSleepHour - 1 + 24) % 24 },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = "Decrease Hour", tint = colors.onSurface, modifier = Modifier.size(16.dp))
+                            }
+                            Text(
+                                text = "%02d:%02d".format(manualSleepHour, manualSleepMinute),
+                                fontFamily = fontFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.onSurface
+                            )
+                            IconButton(
+                                onClick = { manualSleepHour = (manualSleepHour + 1) % 24 },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Increase Hour", tint = colors.onSurface, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "WAKE TIME (SLEEP END)",
+                        fontFamily = fontFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.background)
+                                .padding(2.dp)
+                        ) {
+                            listOf(0 to "Today", 1 to "Tomorrow").forEach { (offset, label) ->
+                                val isSelected = manualWakeDayOffset == offset
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSelected) colors.primary else Color.Transparent)
+                                        .clickable { manualWakeDayOffset = offset }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontFamily = fontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) colors.onPrimary else colors.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        Row(
+                            modifier = Modifier
+                                .weight(1.8f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.background)
+                                .padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            IconButton(
+                                onClick = { manualWakeHour = (manualWakeHour - 1 + 24) % 24 },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = "Decrease Hour", tint = colors.onSurface, modifier = Modifier.size(16.dp))
+                            }
+                            Text(
+                                text = "%02d:%02d".format(manualWakeHour, manualWakeMinute),
+                                fontFamily = fontFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.onSurface
+                            )
+                            IconButton(
+                                onClick = { manualWakeHour = (manualWakeHour + 1) % 24 },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Increase Hour", tint = colors.onSurface, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Button(
+                                onClick = {
+                                    manualSleepMinute = (manualSleepMinute + 15) % 60
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.background),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("+15m Bedtime", fontSize = 9.sp, color = colors.onSurface.copy(alpha = 0.8f), fontFamily = fontFamily)
+                            }
+                            Button(
+                                onClick = {
+                                    manualWakeMinute = (manualWakeMinute + 15) % 60
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.background),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("+15m Wake", fontSize = 9.sp, color = colors.onSurface.copy(alpha = 0.8f), fontFamily = fontFamily)
+                            }
+                        }
+
+                        TextButton(
+                            onClick = {
+                                val now = Calendar.getInstance()
+                                DatePickerDialog(
+                                    context,
+                                    { _, year, month, dayOfMonth ->
+                                        val selDate = Calendar.getInstance().apply {
+                                            set(Calendar.YEAR, year)
+                                            set(Calendar.MONTH, month)
+                                            set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                                        }
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hourOfDay, minute ->
+                                                val logCal = Calendar.getInstance()
+                                                val daysDiff = ((logCal.timeInMillis - selDate.timeInMillis) / 86400000).toInt()
+                                                manualSleepDayOffset = if (daysDiff >= 1) 1 else 0
+                                                manualSleepHour = hourOfDay
+                                                manualSleepMinute = minute
+                                            },
+                                            manualSleepHour, manualSleepMinute, true
+                                        ).show()
+                                    },
+                                    now.get(Calendar.YEAR),
+                                    now.get(Calendar.MONTH),
+                                    now.get(Calendar.DAY_OF_MONTH)
+                                ).show()
+                            },
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Exact Date...", fontSize = 10.sp, color = colors.primary, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val sleepCal = Calendar.getInstance().apply {
+                        if (manualSleepDayOffset == 1) {
+                            add(Calendar.DAY_OF_YEAR, -1)
+                        }
+                        set(Calendar.HOUR_OF_DAY, manualSleepHour)
+                        set(Calendar.MINUTE, manualSleepMinute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    val wakeCal = Calendar.getInstance().apply {
+                        if (manualWakeDayOffset == 1) {
+                            add(Calendar.DAY_OF_YEAR, 1)
+                        }
+                        set(Calendar.HOUR_OF_DAY, manualWakeHour)
+                        set(Calendar.MINUTE, manualWakeMinute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+
+                    val totalRestDurationMs = wakeCal.timeInMillis - sleepCal.timeInMillis
+                    val totalRestHours = totalRestDurationMs / 3600000f
+
+                    if (totalRestDurationMs <= 0) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(colors.secondary.copy(alpha = 0.15f))
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = "⚠️ INVALID TIMESPAN: Bedtime must occur prior to Waking time.",
+                                fontFamily = fontFamily,
+                                fontSize = 11.sp,
+                                color = colors.secondary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        val restHrs = totalRestDurationMs / 3600000
+                        val restMins = (totalRestDurationMs % 3600000) / 60000
+                        
+                        val restProgress = (totalRestHours / sleepTargetHours).coerceIn(0f..1.5f)
+                        val restPercent = (restProgress * 100).toInt()
+                        
+                        val (progressColor, recoveryMood) = when {
+                            totalRestHours < 6.0f -> colors.secondary to "⚠️ INSUFFICIENT RECOVERY"
+                            totalRestHours < sleepTargetHours -> Color(0xFFFFB300) to "⚡ ADEQUATE RECOVERY (DEFICIT)"
+                            else -> Color(0xFF4CAF50) to "✨ OPTIMAL RECOVERY TARGET MET"
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.background)
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "ESTIMATED REST DURATION",
+                                        fontSize = 9.sp,
+                                        fontFamily = fontFamily,
+                                        color = colors.onSurface.copy(alpha = 0.5f),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Row(verticalAlignment = Alignment.Bottom) {
+                                        Text(
+                                            text = "${restHrs}h ${restMins}m",
+                                            fontSize = 20.sp,
+                                            fontFamily = fontFamily,
+                                            color = colors.primary,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "vs %.1fh goal".format(sleepTargetHours),
+                                            fontSize = 11.sp,
+                                            fontFamily = fontFamily,
+                                            color = colors.onSurface.copy(alpha = 0.6f),
+                                            modifier = Modifier.padding(bottom = 2.dp)
+                                        )
+                                    }
+                                }
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(progressColor.copy(alpha = 0.15f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "$restPercent%",
+                                        fontSize = 12.sp,
+                                        fontFamily = fontFamily,
+                                        color = progressColor,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            LinearProgressIndicator(
+                                progress = { restProgress.coerceIn(0f..1f) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                color = progressColor,
+                                trackColor = colors.divider
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = recoveryMood,
+                                fontFamily = fontFamily,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = progressColor
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Divider(color = colors.divider.copy(alpha = 0.4f))
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Rest Quality:",
+                                    fontFamily = fontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onSurface.copy(alpha = 0.8f)
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    for (i in 1..5) {
+                                        val active = i <= manualSleepRating
+                                        Icon(
+                                            imageVector = if (active) Icons.Default.Star else Icons.Default.StarBorder,
+                                            contentDescription = null,
+                                            tint = if (active) Color(0xFFFFD700) else colors.onSurface.copy(alpha = 0.2f),
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clickable { manualSleepRating = i.toFloat() }
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            OutlinedTextField(
+                                value = manualSleepNotes,
+                                onValueChange = { manualSleepNotes = it },
+                                placeholder = { Text("Quality logs notes/comments...", fontFamily = fontFamily, fontSize = 11.sp) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.primary,
+                                    unfocusedBorderColor = colors.divider
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                textStyle = TextStyle(fontSize = 12.sp, fontFamily = fontFamily)
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Button(
+                                onClick = {
+                                    sleepTrackingViewModel.logManualSleepSession(
+                                        startTimeMillis = sleepCal.timeInMillis,
+                                        endTimeMillis = wakeCal.timeInMillis,
+                                        rating = manualSleepRating,
+                                        notes = manualSleepNotes
+                                    )
+                                    manualSleepNotes = ""
+                                    manualSaveSuccessText = "Rest Session logged in biometric repository!"
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .testTag("save_manual_sleep_btn")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Add Manual Sleep Record", fontFamily = fontFamily, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = colors.onPrimary)
+                            }
+
+                            if (manualSaveSuccessText.isNotEmpty()) {
+                                LaunchedEffect(manualSaveSuccessText) {
+                                    delay(4000)
+                                    manualSaveSuccessText = ""
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = manualSaveSuccessText,
+                                    fontFamily = fontFamily,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF4CAF50),
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // PILLAR 3: ACTIVE TRACKER DASHBOARD CARD
         item {
             Card(
@@ -657,6 +1142,173 @@ fun AriseSleepTab(
             )
         }
 
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .testTag("sleep_chart_card"),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.cardBorder),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "BIOMETRIC SLEEP RECOVERY TREND (LAST 7 SESSIONS)",
+                        fontFamily = fontFamily,
+                        color = colors.primary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (sleepSessions.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Insufficient biometric records to compile Trend Graph.",
+                                fontFamily = fontFamily,
+                                fontSize = 11.sp,
+                                color = colors.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    } else {
+                        val recentSessions = sleepSessions.take(7).reversed()
+                        
+                        androidx.compose.foundation.Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                        ) {
+                            val width = size.width
+                            val height = size.height
+                            
+                            val maxHours = 12f
+                            val yPaddingBottom = 20.dp.toPx()
+                            val yPaddingTop = 15.dp.toPx()
+                            val chartHeight = height - yPaddingBottom - yPaddingTop
+                            val xPaddingStart = 30.dp.toPx()
+                            val xPaddingEnd = 10.dp.toPx()
+                            val chartWidth = width - xPaddingStart - xPaddingEnd
+                            
+                            val yLines = listOf(0f, 4f, 8f, 12f)
+                            yLines.forEach { hrs ->
+                                val yPos = height - yPaddingBottom - (hrs / maxHours * chartHeight)
+                                
+                                drawLine(
+                                    color = colors.divider.copy(alpha = 0.3f),
+                                    start = androidx.compose.ui.geometry.Offset(xPaddingStart, yPos),
+                                    end = androidx.compose.ui.geometry.Offset(width - xPaddingEnd, yPos),
+                                    strokeWidth = 1.dp.toPx()
+                                )
+                                
+                                if (Math.abs(hrs - 8f) < 0.1f) {
+                                    val yTarget = height - yPaddingBottom - (sleepTargetHours / maxHours * chartHeight)
+                                    drawLine(
+                                        color = colors.secondary.copy(alpha = 0.6f),
+                                        start = androidx.compose.ui.geometry.Offset(xPaddingStart, yTarget),
+                                        end = androidx.compose.ui.geometry.Offset(width - xPaddingEnd, yTarget),
+                                        strokeWidth = 1.5.dp.toPx(),
+                                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                                    )
+                                }
+                            }
+                            
+                            val barCount = recentSessions.size
+                            val spacingFraction = 0.4f
+                            val totalSpaceForBars = chartWidth / barCount
+                            val barWidth = totalSpaceForBars * (1f - spacingFraction)
+                            
+                            recentSessions.forEachIndexed { index, session ->
+                                val sessionHours = (session.endTimeMillis - session.startTimeMillis) / 3600000f
+                                val barHeight = (sessionHours / maxHours).coerceIn(0f..1f) * chartHeight
+                                
+                                val xPos = xPaddingStart + (index * totalSpaceForBars) + (totalSpaceForBars * spacingFraction / 2)
+                                val yPos = height - yPaddingBottom - barHeight
+                                
+                                val barColor = if (sessionHours >= sleepTargetHours) {
+                                    colors.primary
+                                } else {
+                                    colors.secondary
+                                }
+                                
+                                drawRoundRect(
+                                    color = barColor,
+                                    topLeft = androidx.compose.ui.geometry.Offset(xPos, yPos),
+                                    size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                                )
+                            }
+                        }
+                        
+                        val recentSessionsOrdered = sleepSessions.take(7).reversed()
+                        val sdf = java.text.SimpleDateFormat("MM/dd", java.util.Locale.getDefault())
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 30.dp, end = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            recentSessionsOrdered.forEach { session ->
+                                Text(
+                                    text = sdf.format(java.util.Date(session.startTimeMillis)),
+                                    fontFamily = fontFamily,
+                                    fontSize = 8.sp,
+                                    color = colors.onSurface.copy(alpha = 0.5f),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.width(36.dp)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(colors.primary)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "Target Met", fontFamily = fontFamily, fontSize = 9.sp, color = colors.onSurface.copy(alpha = 0.8f))
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(colors.secondary)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "Target Deficit", fontFamily = fontFamily, fontSize = 9.sp, color = colors.onSurface.copy(alpha = 0.8f))
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(20.dp)
+                                        .height(2.dp)
+                                        .background(colors.secondary.copy(alpha = 0.6f))
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "Goal Line", fontFamily = fontFamily, fontSize = 9.sp, color = colors.onSurface.copy(alpha = 0.8f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (sleepSessions.isEmpty()) {
             item {
                 Card(
@@ -723,19 +1375,35 @@ fun AriseSleepTab(
                                 )
                             }
 
-                            // Interactive delete
-                            IconButton(
-                                onClick = { sleepTrackingViewModel.deleteSession(session) },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .testTag("delete_sleep_session_${session.id}")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete Session",
-                                    tint = Color.Red.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            // Interactive edit & delete
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { sleepSessionToEdit = session },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .testTag("edit_sleep_session_${session.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit Session",
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { sleepTrackingViewModel.deleteSession(session) },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .testTag("delete_sleep_session_${session.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Session",
+                                        tint = Color.Red.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
 
@@ -1310,6 +1978,68 @@ fun AriseSleepTab(
                 TextButton(
                     onClick = { showImportDialog = false }
                 ) {
+                    Text("Cancel", fontFamily = fontFamily, color = colors.onSurface)
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = colors.surface
+        )
+    }
+
+    if (sleepSessionToEdit != null) {
+        val currentSession = sleepSessionToEdit!!
+        var editedNotes by remember(currentSession) { mutableStateOf(currentSession.notes ?: "") }
+        var editedRating by remember(currentSession) { mutableStateOf(currentSession.sleepQualityRating) }
+
+        AlertDialog(
+            onDismissRequest = { sleepSessionToEdit = null },
+            title = { Text("Edit Sleep Session #${currentSession.id}", fontFamily = fontFamily, color = colors.primary) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Adjust Star Rating", fontFamily = fontFamily, fontSize = 12.sp, color = colors.onSurface)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        for (i in 1..5) {
+                            IconButton(onClick = { editedRating = i.toFloat() }) {
+                                Icon(
+                                    imageVector = if (i <= editedRating) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = "Star $i",
+                                    tint = if (i <= editedRating) Color(0xFFFFD700) else colors.onSurface.copy(alpha = 0.2f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = editedNotes,
+                        onValueChange = { editedNotes = it },
+                        label = { Text("Session Notes", color = colors.onSurface) },
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val sessionWithModifications = currentSession.copy(
+                            sleepQualityRating = editedRating,
+                            notes = editedNotes
+                        )
+                        sleepTrackingViewModel.updateSleepSession(sessionWithModifications)
+                        sleepSessionToEdit = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                ) {
+                    Text("Save Changes", fontFamily = fontFamily, color = colors.onPrimary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { sleepSessionToEdit = null }) {
                     Text("Cancel", fontFamily = fontFamily, color = colors.onSurface)
                 }
             },

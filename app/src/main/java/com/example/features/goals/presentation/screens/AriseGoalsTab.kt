@@ -1,5 +1,7 @@
 package com.example.features.goals.presentation.screens
 
+import androidx.compose.animation.AnimatedVisibility
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -53,6 +55,8 @@ fun AriseGoalsTab(
     var selectedSubTab by remember { mutableStateOf(0) } // 0 = Goals, 1 = Habits
     var showAddGoal by remember { mutableStateOf(false) }
     var showAddHabit by remember { mutableStateOf(false) }
+    var habitToEdit by remember { mutableStateOf<Habit?>(null) }
+    var goalToEdit by remember { mutableStateOf<Goal?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -103,7 +107,11 @@ fun AriseGoalsTab(
             }
 
             if (selectedSubTab == 0) {
-                // DAILY PRIORITIES CARD
+                val dailyObjectives = goalsList.filter { it.category == "Daily Objective" }
+                val lifetimeMissions = goalsList.filter { it.category != "Daily Objective" }
+                val context = androidx.compose.ui.platform.LocalContext.current
+
+                // DYNAMIC DAILY OBJECTIVES DASHBOARD CARD
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -113,46 +121,162 @@ fun AriseGoalsTab(
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "DAILY MISSIONS: MORNING 3 PRIORITIES",
-                            fontFamily = fontFamily,
-                            color = colors.primary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "✨ TODAY'S DAILY CHALLENGES",
+                                fontFamily = fontFamily,
+                                color = colors.primary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            IconButton(
+                                onClick = { 
+                                    goalToEdit = null
+                                    showAddGoal = true
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Add Daily Objective",
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        val priorities = listOf(
-                            "1. Exercise and practice mindful breathing",
-                            "2. Complete primary learning milestone review",
-                            "3. Update sleep schedules and recovery logs"
-                        )
-                        priorities.forEach { text ->
-                            var checked by remember { mutableStateOf(false) }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
+                        // Progress Bar calculation
+                        val totalDailies = dailyObjectives.size
+                        val completedDailies = dailyObjectives.count { it.currentProgress >= it.targetProgress }
+                        val dailyPercent = if (totalDailies > 0) completedDailies.toFloat() / totalDailies.toFloat() else 0f
+
+                        // Visual progress bar
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            LinearProgressIndicator(
+                                progress = { dailyPercent },
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { checked = !checked }
-                                    .padding(vertical = 4.dp)
+                                    .weight(1f)
+                                    .height(10.dp)
+                                    .clip(RoundedCornerShape(5.dp)),
+                                color = colors.primary,
+                                trackColor = colors.divider
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "${(dailyPercent * 100).toInt()}%",
+                                fontFamily = fontFamily,
+                                color = colors.primary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (totalDailies > 0) {
+                                "$completedDailies of $totalDailies objectives achieved. Keep ascending! 🚀"
+                            } else {
+                                "No daily objectives defined yet. Tap '+' or below to make some!"
+                            },
+                            fontFamily = fontFamily,
+                            color = colors.onSurface.copy(alpha = 0.6f),
+                            fontSize = 11.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        if (dailyObjectives.isEmpty()) {
+                            Button(
+                                onClick = {
+                                    goalsViewModel.insertGoal(Goal(title = "Exercise and practice mindful breathing", category = "Daily Objective", targetProgress = 1, currentProgress = 0))
+                                    goalsViewModel.insertGoal(Goal(title = "Complete primary learning milestone review", category = "Daily Objective", targetProgress = 1, currentProgress = 0))
+                                    goalsViewModel.insertGoal(Goal(title = "Update sleep schedules and recovery logs", category = "Daily Objective", targetProgress = 1, currentProgress = 0))
+                                    android.widget.Toast.makeText(context, "Seed objectives generated! 🌱", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primaryContainer),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
                             ) {
-                                Checkbox(
-                                    checked = checked,
-                                    onCheckedChange = { checked = it },
-                                    colors = CheckboxDefaults.colors(checkedColor = colors.primary)
-                                )
-                                Text(
-                                    text = text,
-                                    fontFamily = fontFamily,
-                                    fontSize = 12.sp,
-                                    color = colors.onSurface
-                                )
+                                Text("Generate Seed Objectives 🌱", color = colors.primary, fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            dailyObjectives.forEach { goal ->
+                                val isChecked = goal.currentProgress >= goal.targetProgress
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            if (isChecked) {
+                                                goalsViewModel.resetGoalProgress(goal)
+                                            } else {
+                                                goalsViewModel.incrementGoalDirectly(goal)
+                                                android.widget.Toast.makeText(context, "Objective complete! 🎉", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = isChecked,
+                                        onCheckedChange = { checked ->
+                                            if (checked) {
+                                                goalsViewModel.incrementGoalDirectly(goal)
+                                                android.widget.Toast.makeText(context, "Objective complete! 🎉", android.widget.Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                goalsViewModel.resetGoalProgress(goal)
+                                            }
+                                        },
+                                        colors = CheckboxDefaults.colors(checkedColor = colors.primary)
+                                    )
+                                    Text(
+                                        text = goal.title,
+                                        fontFamily = fontFamily,
+                                        fontSize = 12.sp,
+                                        color = if (isChecked) colors.onSurface.copy(alpha = 0.5f) else colors.onSurface,
+                                        style = if (isChecked) androidx.compose.ui.text.TextStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough) else androidx.compose.ui.text.TextStyle.Default,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    IconButton(
+                                        onClick = { goalToEdit = goal },
+                                        modifier = Modifier.size(24.dp).testTag("edit_goal_${goal.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Edit",
+                                            tint = colors.onSurface.copy(alpha = 0.4f),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = { goalsViewModel.deleteGoal(goal) },
+                                        modifier = Modifier.size(24.dp).testTag("delete_goal_${goal.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = Color.Red.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                if (goalsList.isEmpty()) {
+                if (lifetimeMissions.isEmpty()) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -168,7 +292,7 @@ fun AriseGoalsTab(
                             modifier = Modifier.size(80.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("No goals added yet", fontFamily = fontFamily, color = colors.onBackground, fontWeight = FontWeight.Bold)
+                        Text("No lifetime goals added yet", fontFamily = fontFamily, color = colors.onBackground, fontWeight = FontWeight.Bold)
                         Text("Link calendar alarms to complete lifetime streak milestones.", fontFamily = fontFamily, color = colors.onBackground.copy(alpha = 0.6f), fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
                 } else {
@@ -178,8 +302,14 @@ fun AriseGoalsTab(
                             .weight(1f)
                             .padding(horizontal = 16.dp)
                     ) {
-                        items(goalsList) { goal ->
-                            AriseGoalCard(goalsViewModel, goal, colors, fontFamily)
+                        items(lifetimeMissions) { goal ->
+                            AriseGoalCard(
+                                viewModel = goalsViewModel,
+                                goal = goal,
+                                colors = colors,
+                                fontFamily = fontFamily,
+                                onEditClick = { goalToEdit = goal }
+                            )
                         }
                         item {
                             Spacer(modifier = Modifier.height(88.dp))
@@ -256,7 +386,14 @@ fun AriseGoalsTab(
                     ) {
                         items(habitsList) { habit ->
                             val completions = completionsList.filter { it.habitId == habit.id }
-                            AriseHabitCard(habitsViewModel, habit, completions, colors, fontFamily)
+                            AriseHabitCard(
+                                viewModel = habitsViewModel,
+                                habit = habit,
+                                completions = completions,
+                                colors = colors,
+                                fontFamily = fontFamily,
+                                onEditClick = { habitToEdit = habit }
+                            )
                         }
                         item {
                             Spacer(modifier = Modifier.height(88.dp))
@@ -300,6 +437,26 @@ fun AriseGoalsTab(
                 onDismiss = { showAddHabit = false }
             )
         }
+
+        if (habitToEdit != null) {
+            AriseHabitDesignerDialog(
+                viewModel = habitsViewModel,
+                colors = colors,
+                fontFamily = fontFamily,
+                habit = habitToEdit,
+                onDismiss = { habitToEdit = null }
+            )
+        }
+
+        if (goalToEdit != null) {
+            AriseGoalDesignerDialog(
+                viewModel = goalsViewModel,
+                colors = colors,
+                fontFamily = fontFamily,
+                goal = goalToEdit,
+                onDismiss = { goalToEdit = null }
+            )
+        }
     }
 }
 
@@ -309,10 +466,12 @@ fun AriseHabitCard(
     habit: Habit,
     completions: List<HabitCompletion>,
     colors: CustomColorScheme,
-    fontFamily: FontFamily
+    fontFamily: FontFamily,
+    onEditClick: () -> Unit
 ) {
     var showNoteLogger by remember { mutableStateOf(false) }
     var notesText by remember { mutableStateOf("") }
+    var isExpanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -354,6 +513,38 @@ fun AriseHabitCard(
                         fontWeight = FontWeight.Bold,
                         color = colors.onSurface
                     )
+                    
+                    val milestoneText = remember(habit.currentStreak) {
+                        when {
+                            habit.currentStreak >= 30 -> "Ascent Master Legend! 🏆 (30+ Days)"
+                            habit.currentStreak >= 14 -> "Relentless Climber! 🌟 (14+ Days)"
+                            habit.currentStreak >= 7 -> "Perfect Weekly Ascent! 🏔️ (7+ Days)"
+                            habit.currentStreak >= 3 -> "Ascent Trifecta Active! 🔥 (3+ Days)"
+                            else -> null
+                        }
+                    }
+                    if (milestoneText != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = colors.primary.copy(alpha = 0.15f)),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, colors.primary)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = milestoneText,
+                                    fontFamily = fontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary
+                                )
+                            }
+                        }
+                    }
+
                     if (habit.description.isNotEmpty()) {
                         Text(
                             text = habit.description,
@@ -377,13 +568,35 @@ fun AriseHabitCard(
                     }
 
                     IconButton(
+                        onClick = { viewModel.completeHabit(habit.id, "SKIPPED_ON_VACATION") },
+                        modifier = Modifier.testTag("skip_habit_${habit.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PauseCircle,
+                            contentDescription = "Freeze Streak Today",
+                            tint = colors.secondary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier.testTag("edit_habit_${habit.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Habit Details",
+                            tint = colors.onSurface.copy(alpha = 0.60f)
+                        )
+                    }
+
+                    IconButton(
                         onClick = { showNoteLogger = true },
                         modifier = Modifier.testTag("note_habit_${habit.id}")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Edit,
+                            imageVector = Icons.Default.NoteAdd,
                             contentDescription = "Log with custom notes",
-                            tint = colors.onSurface.copy(alpha = 0.60f)
+                            tint = colors.primary
                         )
                     }
 
@@ -453,6 +666,90 @@ fun AriseHabitCard(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Historical Completion Logs (${completions.size})",
+                    fontFamily = fontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary
+                )
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (isExpanded) "Show Less" else "Show More",
+                    tint = colors.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    if (completions.isEmpty()) {
+                        Text(
+                            text = "No completions logged yet.",
+                            fontFamily = fontFamily,
+                            fontSize = 11.sp,
+                            color = colors.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    } else {
+                        completions.sortedByDescending { it.completionTimestamp }.forEach { completion ->
+                            val dateStr = remember(completion.completionTimestamp) {
+                                val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+                                sdf.format(Date(completion.completionTimestamp))
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .background(colors.background.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, colors.divider, RoundedCornerShape(8.dp))
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = dateStr,
+                                        fontFamily = fontFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.onSurface
+                                    )
+                                    if (completion.notes.isNotEmpty()) {
+                                        Text(
+                                            text = completion.notes,
+                                            fontFamily = fontFamily,
+                                            fontSize = 11.sp,
+                                            color = colors.onSurface.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = { viewModel.deleteHabitCompletion(completion) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Delete Log Entry",
+                                        tint = Color.Red.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -501,12 +798,13 @@ fun AriseHabitDesignerDialog(
     viewModel: HabitsViewModel,
     colors: CustomColorScheme,
     fontFamily: FontFamily,
+    habit: Habit? = null,
     onDismiss: () -> Unit
 ) {
-    var title by remember { mutableStateOf("Morning Hydration") }
-    var description by remember { mutableStateOf("Drink 500ml pure water right on wake") }
-    var frequency by remember { mutableStateOf("Daily") }
-    var targetCount by remember { mutableStateOf(1) }
+    var title by remember { mutableStateOf(habit?.title ?: "Morning Hydration") }
+    var description by remember { mutableStateOf(habit?.description ?: "Drink 500ml pure water right on wake") }
+    var frequency by remember { mutableStateOf(habit?.frequency ?: "Daily") }
+    var targetCount by remember { mutableStateOf(habit?.targetCount ?: 1) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -522,7 +820,7 @@ fun AriseHabitDesignerDialog(
                     .fillMaxWidth()
                     .padding(20.dp)
             ) {
-                Text("CULTIVATE HABIT TRAIL", fontFamily = fontFamily, color = colors.primary, fontWeight = FontWeight.Bold)
+                Text(if (habit != null) "MODIFY HABIT TRAIL" else "CULTIVATE HABIT TRAIL", fontFamily = fontFamily, color = colors.primary, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(14.dp))
 
                 OutlinedTextField(
@@ -590,14 +888,25 @@ fun AriseHabitDesignerDialog(
                     Button(
                         onClick = {
                             if (title.isNotEmpty()) {
-                                viewModel.insertHabit(
-                                    Habit(
-                                        title = title,
-                                        description = description,
-                                        frequency = frequency,
-                                        targetCount = targetCount
+                                if (habit != null) {
+                                    viewModel.insertHabit(
+                                        habit.copy(
+                                            title = title,
+                                            description = description,
+                                            frequency = frequency,
+                                            targetCount = targetCount
+                                        )
                                     )
-                                )
+                                } else {
+                                    viewModel.insertHabit(
+                                        Habit(
+                                            title = title,
+                                            description = description,
+                                            frequency = frequency,
+                                            targetCount = targetCount
+                                        )
+                                    )
+                                }
                                 onDismiss()
                             }
                         },
@@ -606,7 +915,7 @@ fun AriseHabitDesignerDialog(
                             .weight(1f)
                             .testTag("save_habit_button")
                     ) {
-                        Text("Initiate Trail", color = colors.onPrimary, fontFamily = fontFamily, fontWeight = FontWeight.Bold)
+                        Text(if (habit != null) "Update Trail" else "Initiate Trail", color = colors.onPrimary, fontFamily = fontFamily, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -619,7 +928,8 @@ fun AriseGoalCard(
     viewModel: GoalsViewModel,
     goal: Goal,
     colors: CustomColorScheme,
-    fontFamily: FontFamily
+    fontFamily: FontFamily,
+    onEditClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -636,7 +946,7 @@ fun AriseGoalCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(goal.category.uppercase(), fontFamily = fontFamily, color = colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     Text(goal.title, fontFamily = fontFamily, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
                 }
@@ -647,6 +957,22 @@ fun AriseGoalCard(
                         modifier = Modifier.testTag("increment_goal_${goal.id}")
                     ) {
                         Icon(Icons.Default.CheckCircle, contentDescription = "Mark Goal Progress", tint = colors.primary)
+                    }
+
+                    if (goal.currentProgress > 0) {
+                        IconButton(
+                            onClick = { viewModel.decrementGoalProgress(goal) },
+                            modifier = Modifier.testTag("decrement_goal_${goal.id}")
+                        ) {
+                            Icon(Icons.Default.Undo, contentDescription = "Undo Goal Progress", tint = colors.onSurface.copy(alpha = 0.6f))
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier.testTag("edit_goal_${goal.id}")
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Goal Details", tint = colors.onSurface.copy(alpha = 0.6f))
                     }
 
                     IconButton(
@@ -699,12 +1025,14 @@ fun AriseGoalDesignerDialog(
     viewModel: GoalsViewModel,
     colors: CustomColorScheme,
     fontFamily: FontFamily,
+    goal: Goal? = null,
     onDismiss: () -> Unit
 ) {
-    var title by remember { mutableStateOf("Learn Kotlin Core") }
-    var description by remember { mutableStateOf("Study daily and implement local apps") }
-    var targetProgress by remember { mutableStateOf(10) }
-    var category by remember { mutableStateOf("Learning") }
+    var title by remember { mutableStateOf(goal?.title ?: "Complete Daily Walk") }
+    var description by remember { mutableStateOf(goal?.description ?: "Study or complete personal task") }
+    var category by remember { mutableStateOf(goal?.category ?: "Daily Objective") }
+    var targetProgress by remember { mutableStateOf(if (category == "Daily Objective") 1 else (goal?.targetProgress ?: 10)) }
+    var currentProgress by remember { mutableStateOf(goal?.currentProgress ?: 0) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -720,13 +1048,22 @@ fun AriseGoalDesignerDialog(
                     .fillMaxWidth()
                     .padding(20.dp)
             ) {
-                Text("CREATE LIFETIME MISSION", fontFamily = fontFamily, color = colors.primary, fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (category == "Daily Objective") {
+                        if (goal != null) "MODIFY DAILY CHALLENGE" else "DEFINE DAILY CHALLENGE"
+                    } else {
+                        if (goal != null) "MODIFY LIFETIME MISSION" else "CREATE LIFETIME MISSION"
+                    },
+                    fontFamily = fontFamily,
+                    color = colors.primary,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(modifier = Modifier.height(14.dp))
 
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Mission Title", color = colors.onSurface) },
+                    label = { Text("Title", color = colors.onSurface) },
                     colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -736,28 +1073,53 @@ fun AriseGoalDesignerDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Mission Description Summary", color = colors.onSurface) },
+                    label = { Text("Details & Summary", color = colors.onSurface) },
                     colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("Milestone Milestones Target: $targetProgress", fontFamily = fontFamily, color = colors.onSurface, fontSize = 12.sp)
-                Slider(
-                    value = targetProgress.toFloat(),
-                    onValueChange = { targetProgress = it.toInt() },
-                    valueRange = 5f..50f,
-                    colors = SliderDefaults.colors(thumbColor = colors.primary)
-                )
+                if (category != "Daily Objective") {
+                    Text("Milestone Target: $targetProgress", fontFamily = fontFamily, color = colors.onSurface, fontSize = 12.sp)
+                    Slider(
+                        value = targetProgress.toFloat(),
+                        onValueChange = { 
+                            targetProgress = it.toInt()
+                        },
+                        valueRange = 5f..100f,
+                        colors = SliderDefaults.colors(thumbColor = colors.primary)
+                    )
+
+                    if (goal != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Current Progress: $currentProgress", fontFamily = fontFamily, color = colors.onSurface, fontSize = 12.sp)
+                        Slider(
+                            value = currentProgress.toFloat(),
+                            onValueChange = { currentProgress = it.toInt().coerceAtMost(targetProgress) },
+                            valueRange = 0f..targetProgress.toFloat(),
+                            colors = SliderDefaults.colors(thumbColor = colors.primary)
+                        )
+                    }
+                } else {
+                    // For Daily Objective, force target targetProgress list to be 1
+                    LaunchedEffect(category) {
+                        targetProgress = 1
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                Text("Mission Type", fontFamily = fontFamily, color = colors.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("Activity Category", fontFamily = fontFamily, color = colors.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf("Fitness", "Career", "Learning", "Health", "Finance").forEach { cat ->
+                    listOf("Daily Objective", "Fitness", "Career", "Learning", "Health", "Finance").forEach { cat ->
                         Button(
-                            onClick = { category = cat },
+                            onClick = { 
+                                category = cat
+                                if (cat == "Daily Objective") {
+                                    targetProgress = 1
+                                }
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = if (category == cat) colors.primary else colors.primaryContainer),
                             modifier = Modifier.padding(end = 4.dp)
                         ) {
@@ -775,23 +1137,37 @@ fun AriseGoalDesignerDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            viewModel.insertGoal(
-                                Goal(
-                                    title = title,
-                                    description = description,
-                                    category = category,
-                                    targetProgress = targetProgress,
-                                    currentProgress = 0
-                                )
-                            )
-                            onDismiss()
+                            if (title.isNotEmpty()) {
+                                if (goal != null) {
+                                    viewModel.insertGoal(
+                                        goal.copy(
+                                            title = title,
+                                            description = description,
+                                            category = category,
+                                            targetProgress = if (category == "Daily Objective") 1 else targetProgress,
+                                            currentProgress = if (category == "Daily Objective") currentProgress.coerceIn(0, 1) else currentProgress
+                                        )
+                                    )
+                                } else {
+                                    viewModel.insertGoal(
+                                        Goal(
+                                            title = title,
+                                            description = description,
+                                            category = category,
+                                            targetProgress = if (category == "Daily Objective") 1 else targetProgress,
+                                            currentProgress = 0
+                                        )
+                                    )
+                                }
+                                onDismiss()
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                         modifier = Modifier
                             .weight(1f)
                             .testTag("save_goal_button")
                     ) {
-                        Text("Start Mission", color = colors.onPrimary, fontFamily = fontFamily, fontWeight = FontWeight.Bold)
+                        Text(if (goal != null) "Update Objective" else "Launch Objective", color = colors.onPrimary, fontFamily = fontFamily, fontWeight = FontWeight.Bold)
                     }
                 }
             }

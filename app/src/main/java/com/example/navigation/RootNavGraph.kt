@@ -17,6 +17,7 @@ import com.example.features.statistics.presentation.viewmodel.StatisticsViewMode
 import com.example.features.settings.presentation.viewmodel.SettingsViewModel
 import com.example.features.security.presentation.viewmodel.SecurityViewModel
 import com.example.features.backup.presentation.viewmodel.BackupViewModel
+import com.example.features.calendar.presentation.viewmodel.SmartAlarmViewModel
 import com.example.features.onboarding.presentation.screens.AriseOnboardingScreen
 import com.example.features.security.presentation.screens.AriseAppLockScreen
 import com.example.features.dashboard.presentation.screens.AriseMainDashboardScreen
@@ -36,9 +37,11 @@ fun RootNavGraph(
     settingsViewModel: SettingsViewModel,
     securityViewModel: SecurityViewModel,
     backupViewModel: BackupViewModel,
+    smartAlarmViewModel: SmartAlarmViewModel,
     colors: CustomColorScheme,
     fontFamily: FontFamily,
-    startDestination: Screen = Screen.MainDashboard
+    startDestination: Screen = Screen.MainDashboard,
+    userRole: String = "user"
 ) {
     NavHost(
         navController = navController,
@@ -65,6 +68,7 @@ fun RootNavGraph(
                 dashboardViewModel = dashboardViewModel,
                 alarmViewModel = alarmViewModel,
                 calendarViewModel = calendarViewModel,
+                smartAlarmViewModel = smartAlarmViewModel,
                 goalsViewModel = goalsViewModel,
                 habitsViewModel = habitsViewModel,
                 sleepViewModel = sleepViewModel,
@@ -74,7 +78,8 @@ fun RootNavGraph(
                 securityViewModel = securityViewModel,
                 backupViewModel = backupViewModel,
                 colors = colors,
-                fontFamily = fontFamily
+                fontFamily = fontFamily,
+                userRole = userRole
             )
         }
 

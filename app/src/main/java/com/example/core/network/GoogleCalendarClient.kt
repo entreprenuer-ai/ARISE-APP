@@ -90,13 +90,26 @@ object GoogleCalendarClient {
     }
 
     private fun parseIso8601(isoStr: String): Long {
-        return try {
-            val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-            val date = format.parse(isoStr)
-            date?.time ?: System.currentTimeMillis()
-        } catch (e: Exception) {
-            System.currentTimeMillis()
+        if (isoStr.isBlank()) return System.currentTimeMillis()
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss"
+        )
+        for (pattern in formats) {
+            try {
+                val format = SimpleDateFormat(pattern, Locale.getDefault())
+                val date = format.parse(isoStr)
+                if (date != null) {
+                    return date.time
+                }
+            } catch (e: Exception) {
+                // Try next pattern
+            }
         }
+        return System.currentTimeMillis()
     }
 
     private fun parseSimpleDate(dateStr: String): Long {

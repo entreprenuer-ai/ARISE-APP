@@ -23,6 +23,7 @@ class AriseAlarmService : Service() {
     private var volumeJob: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main)
     private var audioManager: AudioManager? = null
+    private var vibrator: android.os.Vibrator? = null
     private var audioFocusRequest: android.media.AudioFocusRequest? = null
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         Log.d(TAG, "Audio focus changed: $focusChange")
@@ -78,6 +79,22 @@ class AriseAlarmService : Service() {
         requestFocus()
 
         val context = applicationContext
+
+        // Trigger Vibrate Profile
+        try {
+            vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+            val pattern = longArrayOf(0, 1000, 1000)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val effect = android.os.VibrationEffect.createWaveform(pattern, 0)
+                vibrator?.vibrate(effect)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(pattern, 0)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initiating vibration profile", e)
+        }
+
         val player = MediaPlayer()
         mediaPlayer = player
 
@@ -94,7 +111,11 @@ class AriseAlarmService : Service() {
             val hasSoundPath = !soundPath.isNullOrEmpty()
             if (hasSoundPath) {
                 try {
-                    player.setDataSource(context, Uri.parse(soundPath))
+                    if (soundPath!!.startsWith("/")) {
+                        player.setDataSource(soundPath)
+                    } else {
+                        player.setDataSource(context, Uri.parse(soundPath))
+                    }
                     Log.d(TAG, "Set data source to custom path: $soundPath")
                 } catch (ex: Exception) {
                     Log.e(TAG, "Failed setting local custom file content path, falling back to default alarm ringtone", ex)
@@ -183,6 +204,14 @@ class AriseAlarmService : Service() {
         loopJob = null
         volumeJob?.cancel()
         volumeJob = null
+
+        // Stop Vibrate Profile
+        try {
+            vibrator?.cancel()
+            vibrator = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cancelling vibration", e)
+        }
 
         try {
             mediaPlayer?.let {

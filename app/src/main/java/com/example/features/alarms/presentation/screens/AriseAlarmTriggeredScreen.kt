@@ -98,7 +98,7 @@ fun AriseAlarmTriggeredScreen(
         )
     )
 
-    val stbackgroundColor = if (strobeActive && (System.currentTimeMillis() % 600 > 300)) Color.White else colors.background
+    val stbackgroundColor = if (strobeActive && (System.currentTimeMillis() % 600 > 300)) colors.primaryContainer else colors.background
 
     Column(
         modifier = Modifier
@@ -126,7 +126,55 @@ fun AriseAlarmTriggeredScreen(
             Text(localAlarm.emoji, fontSize = 60.sp)
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // WAKE UP MOTIVATIONAL QUOTE WIDGET (Gap #4)
+        val quotes = remember {
+            listOf(
+                "Arise, awake, and stop not until the goal is reached.",
+                "The best way to predict your future is to create it.",
+                "Your attitude determines your direction.",
+                "Every day is a fresh start. Take a deep breath and begin again.",
+                "Today is another opportunity to rise higher and shine brighter!"
+            )
+        }
+        val todaysQuote = remember {
+            quotes[(System.currentTimeMillis() / (1000 * 3600)).toInt() % quotes.size]
+        }
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .padding(vertical = 4.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.primary.copy(alpha = 0.08f)),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.25f))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "✨ WAKING INSPIRATION",
+                    fontFamily = fontFamily,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "\"$todaysQuote\"",
+                    fontFamily = fontFamily,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    color = colors.onBackground,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         val nowStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
         Text(
@@ -168,6 +216,8 @@ fun AriseAlarmTriggeredScreen(
         )
         Spacer(modifier = Modifier.height(6.dp))
 
+        val selectedMood by viewModel.selectedWakeMood.collectAsState()
+
         Row(
             modifier = Modifier.fillMaxWidth(0.9f),
             horizontalArrangement = Arrangement.SpaceBetween
@@ -178,13 +228,13 @@ fun AriseAlarmTriggeredScreen(
                 "Tired" to "💤 Tired"
             )
             moods.forEach { (key, display) ->
-                var isSelected by remember { mutableStateOf(false) }
+                val isSelected = selectedMood == key
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (isSelected) colors.primaryContainer else Color.Transparent)
                         .border(1.dp, if (isSelected) colors.primary else colors.divider, RoundedCornerShape(8.dp))
-                        .clickable { isSelected = !isSelected }
+                        .clickable { viewModel.setSelectedWakeMood(key) }
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(display, fontFamily = fontFamily, fontSize = 11.sp, color = colors.onBackground)
@@ -227,9 +277,16 @@ fun AriseAlarmTriggeredScreen(
                         OutlinedTextField(
                             value = mathInput,
                             onValueChange = { mathInput = it },
-                            placeholder = { Text("Type Answer") },
+                            placeholder = { Text("Type Answer", color = colors.onSurface.copy(alpha = 0.5f)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = colors.onSurface,
+                                unfocusedTextColor = colors.onSurface,
+                                focusedContainerColor = colors.surface,
+                                unfocusedContainerColor = colors.surface,
+                                focusedBorderColor = colors.primary,
+                                unfocusedBorderColor = colors.divider
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth(0.8f)
                                 .testTag("gate_math_input")
@@ -238,7 +295,13 @@ fun AriseAlarmTriggeredScreen(
                         Button(
                             onClick = {
                                 val parsed = mathInput.toIntOrNull() ?: 0
-                                viewModel.submitMathAnswer(parsed)
+                                val isCorrect = viewModel.submitMathAnswer(parsed)
+                                if (!isCorrect) {
+                                    android.widget.Toast.makeText(context, "❌ Incorrect answer! A new problem has been generated.", android.widget.Toast.LENGTH_SHORT).show()
+                                    mathInput = ""
+                                } else {
+                                    android.widget.Toast.makeText(context, "✅ Challenge solved! Alarm dismissed.", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                             modifier = Modifier.testTag("gate_math_submit")
@@ -331,12 +394,27 @@ fun AriseAlarmTriggeredScreen(
                         OutlinedTextField(
                             value = typeInput,
                             onValueChange = { typeInput = it },
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                            placeholder = { Text("Type quote here...", color = colors.onSurface.copy(alpha = 0.5f)) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = colors.onSurface,
+                                unfocusedTextColor = colors.onSurface,
+                                focusedContainerColor = colors.surface,
+                                unfocusedContainerColor = colors.surface,
+                                focusedBorderColor = colors.primary,
+                                unfocusedBorderColor = colors.divider
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
-                            onClick = { viewModel.submitTypingAnswer(typeInput) },
+                            onClick = {
+                                val isCorrect = viewModel.submitTypingAnswer(typeInput)
+                                if (!isCorrect) {
+                                    android.widget.Toast.makeText(context, "❌ Mismatch! Please copy the exact quote.", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(context, "✅ Quote verified! Alarm dismissed.", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
                         ) {
                             Text("Submit Match", color = colors.onPrimary)
@@ -403,16 +481,26 @@ fun AriseAlarmTriggeredScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         if (localAlarm.snoozeEnabled) {
+            val snoozeLimitReached = localAlarm.snoozeLimit > 0 && localAlarm.snoozeCount >= localAlarm.snoozeLimit
             Button(
-                onClick = { viewModel.snoozeActiveAlarm() },
-                colors = ButtonDefaults.buttonColors(containerColor = colors.surface),
-                border = BorderStroke(1.dp, colors.primary),
+                onClick = { if (!snoozeLimitReached) viewModel.snoozeActiveAlarm() },
+                enabled = !snoozeLimitReached,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.surface,
+                    disabledContainerColor = colors.surface.copy(alpha = 0.5f)
+                ),
+                border = BorderStroke(1.dp, if (snoozeLimitReached) colors.divider else colors.primary),
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
                     .height(44.dp)
                     .testTag("gate_snooze_button")
             ) {
-                Text("Snooze (${localAlarm.snoozeDurationMinutes}m Limit: ${localAlarm.snoozeLimit}x)", color = colors.primary, fontFamily = fontFamily)
+                val snoozeText = if (snoozeLimitReached) {
+                    "Snooze Limit Reached! Solve Challenge"
+                } else {
+                    "Snooze (${localAlarm.snoozeDurationMinutes}m Limit: ${localAlarm.snoozeCount}/${localAlarm.snoozeLimit}x)"
+                }
+                Text(snoozeText, color = if (snoozeLimitReached) colors.onSurface.copy(alpha = 0.4f) else colors.primary, fontFamily = fontFamily)
             }
         }
     }

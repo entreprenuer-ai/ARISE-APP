@@ -35,8 +35,9 @@ class GreetingScreenshotTest {
     val app = context as android.app.Application
     val vm = com.example.ui.viewmodel.AriseViewModel(app, repository)
 
+    val factory = com.example.ui.viewmodel.AriseViewModelFactory(app, repository)
     composeTestRule.setContent {
-      com.example.ui.AriseMainScreen(vm)
+      com.example.ui.AriseMainScreen(vm, factory)
     }
     composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/arise_main.png")
   }

@@ -23,6 +23,7 @@ import com.example.features.statistics.presentation.viewmodel.StatisticsViewMode
 import com.example.features.settings.presentation.viewmodel.SettingsViewModel
 import com.example.features.security.presentation.viewmodel.SecurityViewModel
 import com.example.features.backup.presentation.viewmodel.BackupViewModel
+import com.example.features.calendar.presentation.viewmodel.SmartAlarmViewModel
 import com.example.navigation.AriseBottomBar
 
 import com.example.features.alarms.presentation.screens.AriseAlarmsTab
@@ -36,6 +37,7 @@ fun AriseMainDashboardScreen(
     dashboardViewModel: DashboardViewModel,
     alarmViewModel: AlarmViewModel,
     calendarViewModel: CalendarViewModel,
+    smartAlarmViewModel: SmartAlarmViewModel,
     goalsViewModel: GoalsViewModel,
     habitsViewModel: HabitsViewModel,
     sleepViewModel: SleepViewModel,
@@ -45,7 +47,8 @@ fun AriseMainDashboardScreen(
     securityViewModel: SecurityViewModel,
     backupViewModel: BackupViewModel,
     colors: CustomColorScheme,
-    fontFamily: FontFamily
+    fontFamily: FontFamily,
+    userRole: String
 ) {
     val currentTab by dashboardViewModel.currentTab.collectAsState()
 
@@ -94,6 +97,7 @@ fun AriseMainDashboardScreen(
                     AriseCalendarTab(
                         viewModel = calendarViewModel,
                         alarmViewModel = alarmViewModel,
+                        smartAlarmViewModel = smartAlarmViewModel,
                         colors = colors,
                         fontFamily = fontFamily
                     )
@@ -123,7 +127,8 @@ fun AriseMainDashboardScreen(
                         securityViewModel = securityViewModel,
                         backupViewModel = backupViewModel,
                         colors = colors,
-                        fontFamily = fontFamily
+                        fontFamily = fontFamily,
+                        userRole = userRole
                     )
                 }
             }

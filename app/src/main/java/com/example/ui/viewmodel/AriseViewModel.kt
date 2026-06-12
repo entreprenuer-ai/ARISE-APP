@@ -125,6 +125,36 @@ class AriseViewModel(
     private val _isPremium = MutableStateFlow(false)
     val isPremium: StateFlow<Boolean> = _isPremium.asStateFlow()
 
+    private val _isPremiumLocal = MutableStateFlow(false)
+    val isPremiumLocal: StateFlow<Boolean> = _isPremiumLocal.asStateFlow()
+
+    private val _isPremiumInitiallyFree = MutableStateFlow(true)
+    val isPremiumInitiallyFree: StateFlow<Boolean> = _isPremiumInitiallyFree.asStateFlow()
+
+    private val _premiumExpiryTime = MutableStateFlow(0L)
+    val premiumExpiryTime: StateFlow<Long> = _premiumExpiryTime.asStateFlow()
+
+    private val _forcePremiumOverride = MutableStateFlow(false)
+    val forcePremiumOverride: StateFlow<Boolean> = _forcePremiumOverride.asStateFlow()
+
+    private val _isSkinsPremiumLocked = MutableStateFlow(true)
+    val isSkinsPremiumLocked: StateFlow<Boolean> = _isSkinsPremiumLocked.asStateFlow()
+
+    private val _isColorsPremiumLocked = MutableStateFlow(true)
+    val isColorsPremiumLocked: StateFlow<Boolean> = _isColorsPremiumLocked.asStateFlow()
+
+    private val _isSoundsPremiumLocked = MutableStateFlow(true)
+    val isSoundsPremiumLocked: StateFlow<Boolean> = _isSoundsPremiumLocked.asStateFlow()
+
+    private val _isBackupPremiumLocked = MutableStateFlow(true)
+    val isBackupPremiumLocked: StateFlow<Boolean> = _isBackupPremiumLocked.asStateFlow()
+
+    private val _isHabitLimitPremiumLocked = MutableStateFlow(true)
+    val isHabitLimitPremiumLocked: StateFlow<Boolean> = _isHabitLimitPremiumLocked.asStateFlow()
+
+    private val _isGoalLimitPremiumLocked = MutableStateFlow(true)
+    val isGoalLimitPremiumLocked: StateFlow<Boolean> = _isGoalLimitPremiumLocked.asStateFlow()
+
     private val _habitLimit = MutableStateFlow(3)
     val habitLimit: StateFlow<Int> = _habitLimit.asStateFlow()
 
@@ -140,10 +170,87 @@ class AriseViewModel(
     private val _promoCodeStatus = MutableStateFlow("")
     val promoCodeStatus: StateFlow<String> = _promoCodeStatus.asStateFlow()
 
+    fun updateCalculatedPremiumStatus() {
+        val initiallyFree = _isPremiumInitiallyFree.value
+        val override = _forcePremiumOverride.value
+        val local = _isPremiumLocal.value
+        val expiry = _premiumExpiryTime.value
+        val currentTime = System.currentTimeMillis()
+        _isPremium.value = initiallyFree || override || local || (expiry > 0L && currentTime < expiry)
+    }
+
     fun setPremiumStatus(isPrem: Boolean) {
-        _isPremium.value = isPrem
+        _isPremiumLocal.value = isPrem
+        updateCalculatedPremiumStatus()
         viewModelScope.launch {
             repository.saveSetting("is_premium", isPrem.toString())
+            repository.saveSetting("isPremium", isPrem.toString())
+        }
+    }
+
+    fun setPremiumInitiallyFree(enabled: Boolean) {
+        _isPremiumInitiallyFree.value = enabled
+        updateCalculatedPremiumStatus()
+        viewModelScope.launch {
+            repository.saveSetting("is_premium_initially_free", enabled.toString())
+        }
+    }
+
+    fun setForcePremiumOverride(enabled: Boolean) {
+        _forcePremiumOverride.value = enabled
+        updateCalculatedPremiumStatus()
+        viewModelScope.launch {
+            repository.saveSetting("force_premium_override", enabled.toString())
+        }
+    }
+
+    fun setPremiumExpiryTime(timeMs: Long) {
+        _premiumExpiryTime.value = timeMs
+        updateCalculatedPremiumStatus()
+        viewModelScope.launch {
+            repository.saveSetting("premium_expiry_time", timeMs.toString())
+        }
+    }
+
+    fun setSkinsPremiumLocked(enabled: Boolean) {
+        _isSkinsPremiumLocked.value = enabled
+        viewModelScope.launch {
+            repository.saveSetting("is_skins_premium_locked", enabled.toString())
+        }
+    }
+
+    fun setColorsPremiumLocked(enabled: Boolean) {
+        _isColorsPremiumLocked.value = enabled
+        viewModelScope.launch {
+            repository.saveSetting("is_colors_premium_locked", enabled.toString())
+        }
+    }
+
+    fun setSoundsPremiumLocked(enabled: Boolean) {
+        _isSoundsPremiumLocked.value = enabled
+        viewModelScope.launch {
+            repository.saveSetting("is_sounds_premium_locked", enabled.toString())
+        }
+    }
+
+    fun setBackupPremiumLocked(enabled: Boolean) {
+        _isBackupPremiumLocked.value = enabled
+        viewModelScope.launch {
+            repository.saveSetting("is_backup_premium_locked", enabled.toString())
+        }
+    }
+
+    fun setHabitLimitPremiumLocked(enabled: Boolean) {
+        _isHabitLimitPremiumLocked.value = enabled
+        viewModelScope.launch {
+            repository.saveSetting("is_habit_limit_premium_locked", enabled.toString())
+        }
+    }
+
+    fun setGoalLimitPremiumLocked(enabled: Boolean) {
+        _isGoalLimitPremiumLocked.value = enabled
+        viewModelScope.launch {
+            repository.saveSetting("is_goal_limit_premium_locked", enabled.toString())
         }
     }
 
@@ -151,6 +258,7 @@ class AriseViewModel(
         _habitLimit.value = limit
         viewModelScope.launch {
             repository.saveSetting("habit_limit", limit.toString())
+            repository.saveSetting("habitLimit", limit.toString())
         }
     }
 
@@ -158,6 +266,7 @@ class AriseViewModel(
         _goalLimit.value = limit
         viewModelScope.launch {
             repository.saveSetting("goal_limit", limit.toString())
+            repository.saveSetting("goalLimit", limit.toString())
         }
     }
 
@@ -175,12 +284,28 @@ class AriseViewModel(
 
     fun redeemPromoCode(): Boolean {
         val code = _promoCodeInput.value.trim().uppercase()
-        if (code == "COSMIC99" || code == "ARISEFREE" || code == "PREMIUMPASS" || code == "ADMIN123") {
+        if (code == "FREE7DAYS") {
+            val extension = 7L * 24 * 3600 * 1000
+            setPremiumExpiryTime(System.currentTimeMillis() + extension)
+            _promoCodeStatus.value = "Promo Code Redeemed! 7 Days Premium Unlocked! 🚀"
+            return true
+        } else if (code == "FREE30DAYS") {
+            val extension = 30L * 24 * 3600 * 1000
+            setPremiumExpiryTime(System.currentTimeMillis() + extension)
+            _promoCodeStatus.value = "Promo Code Redeemed! 30 Days Premium Unlocked! 🚀"
+            return true
+        } else if (code == "FREE90DAYS") {
+            val extension = 90L * 24 * 3600 * 1000
+            setPremiumExpiryTime(System.currentTimeMillis() + extension)
+            _promoCodeStatus.value = "Promo Code Redeemed! 90 Days Premium Unlocked! 🚀"
+            return true
+        } else if (code == "COSMIC99" || code == "ARISEFREE" || code == "PREMIUMPASS" || code == "ADMIN123" || code == "ADMINVIP") {
             setPremiumStatus(true)
+            setPremiumExpiryTime(0L) // reset any restricted expiry, lifetime premium is active
             _promoCodeStatus.value = "Promo Code Redeemed! Cosmic Premium Unlocked! 🚀"
             return true
         } else {
-            _promoCodeStatus.value = "Invalid Code. Try 'COSMIC99' or 'ADMIN123' if you are an Administrator."
+            _promoCodeStatus.value = "Invalid Code. Try 'FREE7DAYS', 'FREE30DAYS' or contact support."
             return false
         }
     }
@@ -283,7 +408,8 @@ class AriseViewModel(
                     put("email", email)
                     put("password", password)
                     put("data", JSONObject().apply {
-                        put("role", roleVal)
+                        val targetRole = if (email.equals("veerendrabotla@gmail.com", ignoreCase = true)) "admin" else roleVal
+                        put("role", targetRole)
                     })
                 }
 
@@ -361,7 +487,9 @@ class AriseViewModel(
                             
                             // Check role from user_metadata or set user by default.
                             var role = "user"
-                            if (userObj.has("user_metadata")) {
+                            if (userEmailVal.equals("veerendrabotla@gmail.com", ignoreCase = true)) {
+                                role = "admin"
+                            } else if (userObj.has("user_metadata")) {
                                 val meta = userObj.getJSONObject("user_metadata")
                                 if (meta.has("role")) {
                                     role = meta.getString("role")
@@ -414,6 +542,9 @@ class AriseViewModel(
                                     repository.saveSetting("logged_in_email", userEmailVal)
                                     repository.saveSetting("logged_in_role", finalRole)
                                     repository.saveSetting("session_token", token)
+                                    repository.saveSetting("firstBootCompleted", "true")
+                                    repository.saveSetting("first_boot_completed", "true")
+                                    _firstBootCompleted.value = true
                                     
                                     if (finalRole == "admin") {
                                         _isAdminMode.value = true
@@ -485,6 +616,13 @@ class AriseViewModel(
         _userEmail.value = "Guest User (Offline)"
         _userRole.value = "user"
         _supabaseStatus.value = "In offline Guest Mode. Cloud sync disabled."
+        viewModelScope.launch {
+            repository.saveSetting("firstBootCompleted", "true")
+            repository.saveSetting("first_boot_completed", "true")
+            _firstBootCompleted.value = true
+            repository.saveSetting("logged_in_email", "Guest User (Offline)")
+            repository.saveSetting("logged_in_role", "user")
+        }
     }
 
     private val _navigationSoundsEnabled = MutableStateFlow(true)
@@ -564,13 +702,46 @@ class AriseViewModel(
             repository.allSettings.collect { settingsList ->
                 settingsList.forEach { setting ->
                     when (setting.key) {
-                        "app_skin" -> _appSkin.value = setting.value
-                        "accent_color" -> _customAccentColorHex.value = setting.value
-                        "is_dark_theme" -> _isDarkTheme.value = setting.value.toBoolean()
-                        "first_boot_completed" -> _firstBootCompleted.value = setting.value.toBoolean()
-                        "is_premium" -> _isPremium.value = setting.value.toBoolean()
-                        "habit_limit" -> _habitLimit.value = setting.value.toIntOrNull() ?: 3
-                        "goal_limit" -> _goalLimit.value = setting.value.toIntOrNull() ?: 3
+                        "app_skin", "appSkin" -> _appSkin.value = setting.value
+                        "accent_color", "accentColorHex" -> _customAccentColorHex.value = setting.value
+                        "is_dark_theme", "isDarkTheme" -> _isDarkTheme.value = setting.value.toBoolean()
+                        "first_boot_completed", "firstBootCompleted" -> _firstBootCompleted.value = setting.value.toBoolean()
+                        "is_premium", "isPremium" -> {
+                            _isPremiumLocal.value = setting.value.toBoolean()
+                            updateCalculatedPremiumStatus()
+                        }
+                        "is_premium_initially_free" -> {
+                            _isPremiumInitiallyFree.value = setting.value.toBoolean()
+                            updateCalculatedPremiumStatus()
+                        }
+                        "premium_expiry_time" -> {
+                            _premiumExpiryTime.value = setting.value.toLongOrNull() ?: 0L
+                            updateCalculatedPremiumStatus()
+                        }
+                        "force_premium_override" -> {
+                            _forcePremiumOverride.value = setting.value.toBoolean()
+                            updateCalculatedPremiumStatus()
+                        }
+                        "is_skins_premium_locked" -> {
+                            _isSkinsPremiumLocked.value = setting.value.toBoolean()
+                        }
+                        "is_colors_premium_locked" -> {
+                            _isColorsPremiumLocked.value = setting.value.toBoolean()
+                        }
+                        "is_sounds_premium_locked" -> {
+                            _isSoundsPremiumLocked.value = setting.value.toBoolean()
+                        }
+                        "is_backup_premium_locked" -> {
+                            _isBackupPremiumLocked.value = setting.value.toBoolean()
+                        }
+                        "is_habit_limit_premium_locked" -> {
+                            _isHabitLimitPremiumLocked.value = setting.value.toBoolean()
+                        }
+                        "is_goal_limit_premium_locked" -> {
+                            _isGoalLimitPremiumLocked.value = setting.value.toBoolean()
+                        }
+                        "habit_limit", "habitLimit" -> _habitLimit.value = setting.value.toIntOrNull() ?: 3
+                        "goal_limit", "goalLimit" -> _goalLimit.value = setting.value.toIntOrNull() ?: 3
                         "app_pin" -> {
                             _appPin.value = setting.value
                             if (setting.value.isNotEmpty()) {
@@ -618,10 +789,13 @@ class AriseViewModel(
     fun completeOnboarding(skin: String, accentHex: String) {
         viewModelScope.launch {
             repository.saveSetting("app_skin", skin)
+            repository.saveSetting("appSkin", skin)
             _appSkin.value = skin
             repository.saveSetting("accent_color", accentHex)
+            repository.saveSetting("accentColorHex", accentHex)
             _customAccentColorHex.value = accentHex
             repository.saveSetting("first_boot_completed", "true")
+            repository.saveSetting("firstBootCompleted", "true")
             _firstBootCompleted.value = true
         }
     }
@@ -629,6 +803,7 @@ class AriseViewModel(
     fun resetOnboarding() {
         viewModelScope.launch {
             repository.saveSetting("first_boot_completed", "false")
+            repository.saveSetting("firstBootCompleted", "false")
             _firstBootCompleted.value = false
         }
     }
@@ -1022,17 +1197,20 @@ class AriseViewModel(
     fun updateAppSkin(skin: String) = viewModelScope.launch {
         _appSkin.value = skin
         repository.saveSetting("app_skin", skin)
+        repository.saveSetting("appSkin", skin)
     }
 
     fun updateAccentColor(hex: String) = viewModelScope.launch {
         _customAccentColorHex.value = hex
         repository.saveSetting("accent_color", hex)
+        repository.saveSetting("accentColorHex", hex)
     }
 
     fun toggleAppTheme() = viewModelScope.launch {
         val nextTheme = !_isDarkTheme.value
         _isDarkTheme.value = nextTheme
         repository.saveSetting("is_dark_theme", nextTheme.toString())
+        repository.saveSetting("isDarkTheme", nextTheme.toString())
     }
 
     // PIN Lock system

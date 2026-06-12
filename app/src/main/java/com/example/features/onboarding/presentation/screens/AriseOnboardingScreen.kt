@@ -32,16 +32,23 @@ fun AriseOnboardingScreen(
     var selectedSkin by remember { mutableStateOf("Futuristic") }
     var selectedAccent by remember { mutableStateOf("#00F5FF") }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
+    val isDark by viewModel.isDarkTheme.collectAsState()
+
+    com.example.core.designsystem.AriseThemeWrapper(
+        appSkin = selectedSkin,
+        accentColorHex = selectedAccent,
+        isDark = isDark
+    ) { colors, fontFamily ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colors.background)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
@@ -336,4 +343,5 @@ fun AriseOnboardingScreen(
             }
         }
     }
+}
 }

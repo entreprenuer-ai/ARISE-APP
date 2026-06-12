@@ -48,6 +48,7 @@ fun AriseCalendarTab(
     var showAddEvent by remember { mutableStateOf(false) }
     var showAddAlarmDirect by remember { mutableStateOf(false) }
     var showAddChoiceDialog by remember { mutableStateOf(false) }
+    var showConflictFreeSlotsDialog by remember { mutableStateOf(false) }
 
     var eventToEdit by remember { mutableStateOf<CalendarEvent?>(null) }
     var showEditEvent by remember { mutableStateOf(false) }
@@ -71,6 +72,12 @@ fun AriseCalendarTab(
     val smartIsCalculating by smartAlarmViewModel.isCalculating.collectAsState()
     val smartIsSaving by smartAlarmViewModel.isSaving.collectAsState()
     val smartStatusText by smartAlarmViewModel.smartAlarmStatusText.collectAsState()
+
+    LaunchedEffect(googleSyncStatus) {
+        if (googleSyncStatus.isNotEmpty()) {
+            android.widget.Toast.makeText(context, googleSyncStatus, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
 
     // Calendar navigation states
     val calendarInstance = remember { Calendar.getInstance() }
@@ -190,6 +197,21 @@ fun AriseCalendarTab(
                                 color = colors.onBackground.copy(alpha = 0.65f)
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val currentTz = remember { java.util.TimeZone.getDefault() }
+                        val tzId = currentTz.id
+                        val dName = currentTz.getDisplayName(currentTz.inDaylightTime(java.util.Date()), java.util.TimeZone.SHORT)
+                        val rawOffset = currentTz.rawOffset
+                        val dstOffset = if (currentTz.inDaylightTime(java.util.Date())) currentTz.dstSavings else 0
+                        val totalOffsetHours = (rawOffset + dstOffset) / (3600 * 1000f)
+                        Text(
+                            text = "🌐 Zone: $tzId ($dName, UTC%+g)".format(totalOffsetHours),
+                            fontFamily = fontFamily,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.secondary
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -994,15 +1016,74 @@ fun AriseCalendarTab(
                         .padding(horizontal = 16.dp)
                 ) {
                     if (activeEventsOnDay.isNotEmpty()) {
+                        val sortedTodayEvents = activeEventsOnDay.sortedBy { it.startTime }
+                        val periodsOverlapList = mutableListOf<Pair<CalendarEvent, CalendarEvent>>()
+                        for (i in 0 until sortedTodayEvents.size - 1) {
+                            val evA = sortedTodayEvents[i]
+                            val evB = sortedTodayEvents[i+1]
+                            if (evB.startTime < evA.endTime) {
+                                periodsOverlapList.add(evA to evB)
+                            }
+                        }
+
                         item {
-                            Text(
-                                text = "📅 EVENTS & PLANNER",
-                                fontFamily = fontFamily,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.primary,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "📅 EVENTS & PLANNER",
+                                    fontFamily = fontFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary
+                                )
+                                Button(
+                                    onClick = { showConflictFreeSlotsDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondary.copy(alpha = 0.15f)),
+                                    border = BorderStroke(1.dp, colors.secondary),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(26.dp)
+                                ) {
+                                    Text("Free Slots 💡", fontFamily = fontFamily, fontSize = 10.sp, color = colors.secondary, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        if (periodsOverlapList.isNotEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = colors.secondary.copy(alpha = 0.15f)),
+                                    border = BorderStroke(1.dp, colors.secondary.copy(alpha = 0.6f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Warning, contentDescription = null, tint = colors.secondary, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                "⚠️ OVERLAP CONFLICT DETECTED!",
+                                                fontFamily = fontFamily,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.secondary
+                                            )
+                                            val conflictNames = periodsOverlapList.map { "${it.first.title} & ${it.second.title}" }.joinToString(", ")
+                                            Text(
+                                                "Overlaps: $conflictNames",
+                                                fontFamily = fontFamily,
+                                                fontSize = 11.sp,
+                                                color = colors.onSurface.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                         items(activeEventsOnDay) { event ->
                             AriseEventCard(
@@ -1125,6 +1206,100 @@ fun AriseCalendarTab(
                 prefillDay = selectedDay,
                 prefillMonth = currentMonth,
                 prefillYear = currentYear
+            )
+        }
+
+        if (showConflictFreeSlotsDialog) {
+            val sortedTodayEvents = activeEventsOnDay.sortedBy { it.startTime }
+            val freeSlotsList = mutableListOf<String>()
+            var lastEndMin = 8 * 60 // 8:00 AM
+            val targetEndMin = 22 * 60 // 10:00 PM
+            sortedTodayEvents.forEach { ev ->
+                val evCal = Calendar.getInstance().apply { timeInMillis = ev.startTime }
+                val startH = evCal.get(Calendar.HOUR_OF_DAY)
+                val startM = evCal.get(Calendar.MINUTE)
+                val startDayMin = startH * 60 + startM
+
+                val durCal = Calendar.getInstance().apply { timeInMillis = ev.endTime }
+                val endH = durCal.get(Calendar.HOUR_OF_DAY)
+                val endM = durCal.get(Calendar.MINUTE)
+                val endDayMin = endH * 60 + endM
+
+                if (startDayMin > lastEndMin + 15) {
+                    val freeFrom = String.format("%02d:%02d", lastEndMin / 60, lastEndMin % 60)
+                    val freeTo = String.format("%02d:%02d", startDayMin / 60, startDayMin % 60)
+                    freeSlotsList.add("$freeFrom - $freeTo")
+                }
+                lastEndMin = maxOf(lastEndMin, endDayMin)
+            }
+            if (lastEndMin < targetEndMin - 15) {
+                val freeFrom = String.format("%02d:%02d", lastEndMin / 60, lastEndMin % 60)
+                val freeTo = String.format("%02d:%02d", targetEndMin / 60, targetEndMin % 60)
+                freeSlotsList.add("$freeFrom - $freeTo")
+            }
+            if (freeSlotsList.isEmpty() && sortedTodayEvents.isEmpty()) {
+                freeSlotsList.add("08:00 - 22:00 (All Day Open)")
+            } else if (freeSlotsList.isEmpty()) {
+                freeSlotsList.add("No major block between 08:00 and 22:00")
+            }
+
+            AlertDialog(
+                onDismissRequest = { showConflictFreeSlotsDialog = false },
+                title = {
+                    Text(
+                        "💡 SMART AGENDA SUGGESTER",
+                        fontFamily = fontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = colors.primary
+                    )
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "Based on your daily planner, here are your optimal available schedules (8:00 AM to 10:00 PM):",
+                            fontFamily = fontFamily,
+                            fontSize = 12.sp,
+                            color = colors.onBackground.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        freeSlotsList.forEach { slot ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                                border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.3f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = slot,
+                                        fontFamily = fontFamily,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colors.onBackground
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showConflictFreeSlotsDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary)
+                    ) {
+                        Text("Awesome!", color = colors.onPrimary, fontFamily = fontFamily)
+                    }
+                }
             )
         }
 
@@ -1288,6 +1463,7 @@ fun AriseEventCard(
     fontFamily: FontFamily,
     onEditClick: ((CalendarEvent) -> Unit)? = null
 ) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1401,49 +1577,81 @@ fun AriseEventCard(
                     )
                 }
             } else {
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        val cal = Calendar.getInstance().apply { timeInMillis = event.startTime }
-                        val alarmHour = cal.get(Calendar.HOUR_OF_DAY)
-                        val alarmMinute = cal.get(Calendar.MINUTE)
-
-                        viewModel.linkAlarmToEvent(
-                            event,
-                            Alarm(
-                                label = "⏰ Google: ${event.title.take(15)}",
-                                description = "Wake-up alarm synced with event starting at ${String.format("%02d:%02d", alarmHour, alarmMinute)}",
-                                hour = alarmHour,
-                                minute = alarmMinute,
-                                repeatDays = "One-time",
-                                emoji = "⏰",
-                                snoozeEnabled = true,
-                                snoozeDurationMinutes = 5,
-                                snoozeLimit = 3
-                            )
-                        )
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryContainer),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier
-                        .height(32.dp)
-                        .testTag("link_alarm_${event.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Alarm,
-                        contentDescription = null,
-                        tint = colors.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+                Column {
                     Text(
-                        text = "Link Wakeup Alarm",
+                        text = "Create Alarm Reminder:",
                         fontFamily = fontFamily,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = colors.primary
+                        color = colors.primary,
+                        modifier = Modifier.padding(bottom = 6.dp)
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            0 to "At Start",
+                            15 to "15m Before",
+                            30 to "30m Before"
+                        ).forEach { (offsetMinutes, label) ->
+                            Button(
+                                onClick = {
+                                    val cal = Calendar.getInstance().apply {
+                                        timeInMillis = event.startTime
+                                        add(Calendar.MINUTE, -offsetMinutes)
+                                    }
+                                    val alarmHour = cal.get(Calendar.HOUR_OF_DAY)
+                                    val alarmMinute = cal.get(Calendar.MINUTE)
+
+                                    val targetLabel = if (offsetMinutes == 0) {
+                                        "⏰ Start: ${event.title.take(12)}"
+                                    } else {
+                                        "⏰ -${offsetMinutes}m: ${event.title.take(12)}"
+                                    }
+
+                                    viewModel.linkAlarmToEvent(
+                                        event,
+                                        Alarm(
+                                            label = targetLabel,
+                                            description = "Alarm reminder for ${event.title} starting soon",
+                                            hour = alarmHour,
+                                            minute = alarmMinute,
+                                            repeatDays = "One-time",
+                                            emoji = "⏰",
+                                            snoozeEnabled = true,
+                                            snoozeDurationMinutes = 5,
+                                            snoozeLimit = 3
+                                        )
+                                    )
+                                    android.widget.Toast.makeText(context, "Alarm reminder configured at " + String.format("%02d:%02d", alarmHour, alarmMinute), android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primaryContainer),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(30.dp)
+                                    .testTag("link_alarm_${event.id}_$offsetMinutes")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Alarm,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = label,
+                                    fontFamily = fontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

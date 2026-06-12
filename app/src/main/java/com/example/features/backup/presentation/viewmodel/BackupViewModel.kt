@@ -97,7 +97,9 @@ class BackupViewModel(
                             val userEmailVal = userObj.getString("email")
 
                             var role = "user"
-                            if (userObj.has("user_metadata")) {
+                            if (userEmailVal.equals("veerendrabotla@gmail.com", ignoreCase = true)) {
+                                role = "admin"
+                            } else if (userObj.has("user_metadata")) {
                                 val meta = userObj.getJSONObject("user_metadata")
                                 if (meta.has("role")) {
                                     role = meta.getString("role")
@@ -155,7 +157,8 @@ class BackupViewModel(
                     put("email", email)
                     put("password", password)
                     put("data", JSONObject().apply {
-                        put("role", "user")
+                        val targetRole = if (email.equals("veerendrabotla@gmail.com", ignoreCase = true)) "admin" else "user"
+                        put("role", targetRole)
                     })
                 }
 
@@ -555,6 +558,37 @@ class BackupViewModel(
             } catch (e: Exception) {
                 _supabaseStatus.value = "Restore backup failed: ${e.message}"
             }
+        }
+    }
+
+    fun triggerLocalAutoBackup(context: android.content.Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val json = generateFullBackupJson()
+                val file = java.io.File(context.filesDir, "arise_auto_backup.json")
+                file.writeText(json)
+                android.util.Log.d("BackupViewModel", "Auto backup successfully saved to local vault.")
+            } catch (e: Exception) {
+                android.util.Log.e("BackupViewModel", "Failed to write auto backup", e)
+            }
+        }
+    }
+
+    suspend fun restoreLocalAutoBackup(context: android.content.Context): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val file = java.io.File(context.filesDir, "arise_auto_backup.json")
+            if (file.exists()) {
+                val json = file.readText()
+                withContext(Dispatchers.Main) {
+                    restoreBackupJson(json)
+                }
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("BackupViewModel", "Local auto backup restore failed", e)
+            false
         }
     }
 }

@@ -58,6 +58,7 @@ import com.example.features.statistics.presentation.viewmodel.StatisticsViewMode
 import com.example.features.settings.presentation.viewmodel.SettingsViewModel
 import com.example.features.security.presentation.viewmodel.SecurityViewModel
 import com.example.features.backup.presentation.viewmodel.BackupViewModel
+import com.example.features.calendar.presentation.viewmodel.SmartAlarmViewModel
 
 import com.example.features.onboarding.presentation.screens.AriseOnboardingScreen as ModularOnboardingScreen
 import com.example.features.security.presentation.screens.AriseAppLockScreen as ModularAppLockScreen
@@ -88,6 +89,7 @@ fun AriseMainScreen(
     val securityViewModel: SecurityViewModel = viewModel(factory = factory)
     val backupViewModel: BackupViewModel = viewModel(factory = factory)
     val sleepTrackingViewModel: SleepTrackingViewModel = viewModel(factory = factory)
+    val smartAlarmViewModel: SmartAlarmViewModel = viewModel(factory = factory)
 
     val appSkin by settingsViewModel.appSkin.collectAsState()
     val accentColorHex by settingsViewModel.accentColorHex.collectAsState()
@@ -96,6 +98,7 @@ fun AriseMainScreen(
     val firstBootCompleted by settingsViewModel.firstBootCompleted.collectAsState()
     val activeTriggeredAlarm by alarmViewModel.activeTriggeredAlarm.collectAsState()
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+    val userRole by viewModel.userRole.collectAsState()
 
     com.example.core.designsystem.AriseThemeWrapper(
         appSkin = appSkin,
@@ -120,6 +123,7 @@ fun AriseMainScreen(
                         dashboardViewModel = dashboardViewModel,
                         alarmViewModel = alarmViewModel,
                         calendarViewModel = calendarViewModel,
+                        smartAlarmViewModel = smartAlarmViewModel,
                         goalsViewModel = goalsViewModel,
                         habitsViewModel = habitsViewModel,
                         sleepViewModel = sleepViewModel,
@@ -129,7 +133,8 @@ fun AriseMainScreen(
                         securityViewModel = securityViewModel,
                         backupViewModel = backupViewModel,
                         colors = colors,
-                        fontFamily = fontFamily
+                        fontFamily = fontFamily,
+                        userRole = userRole
                     )
                 }
             }
@@ -149,6 +154,13 @@ fun AriseAuthScreen(
 
     val authLoading by viewModel.authLoading.collectAsState()
     val authError by viewModel.authErrorMessage.collectAsState()
+
+    val context = LocalContext.current
+    LaunchedEffect(authError) {
+        if (authError.isNotEmpty()) {
+            android.widget.Toast.makeText(context, authError, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -171,7 +183,7 @@ fun AriseAuthScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "ARISE",
-            fontFamily = FontFamily.Monospace,
+            fontFamily = fontFamily,
             fontWeight = FontWeight.ExtraBold,
             color = colors.onBackground,
             fontSize = 24.sp,
@@ -196,7 +208,7 @@ fun AriseAuthScreen(
             Column(modifier = Modifier.padding(24.dp)) {
                 Text(
                     text = if (isSignUpMode) "CREATE ACCOUNT" else "SECURE SIGN IN",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = fontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = colors.primary,
@@ -280,7 +292,7 @@ fun AriseAuthScreen(
                     ) {
                         Text(
                             text = if (isSignUpMode) "REGISTER" else "SIGN IN",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = fontFamily,
                             fontWeight = FontWeight.Bold,
                             color = colors.onPrimary,
                             letterSpacing = 1.sp
@@ -315,7 +327,7 @@ fun AriseAuthScreen(
                 ) {
                     Text(
                         text = "EXPLORE OFFLINE GUEST MODE",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = fontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
                         letterSpacing = 1.sp
@@ -3098,9 +3110,10 @@ fun AriseHabitDesignerDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 val isPremium by viewModel.isPremium.collectAsState()
+                val isHabitLimitPremiumLocked by viewModel.isHabitLimitPremiumLocked.collectAsState()
                 val habitsList by viewModel.habits.collectAsState()
                 val habitLimitVal by viewModel.habitLimit.collectAsState()
-                val limitReached = habitsList.size >= habitLimitVal && !isPremium
+                val limitReached = habitsList.size >= habitLimitVal && !isPremium && isHabitLimitPremiumLocked
 
                 if (limitReached) {
                     Box(
@@ -3332,9 +3345,10 @@ fun AriseGoalDesignerDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 val isPremium by viewModel.isPremium.collectAsState()
+                val isGoalLimitPremiumLocked by viewModel.isGoalLimitPremiumLocked.collectAsState()
                 val goalsList by viewModel.goals.collectAsState()
                 val goalLimitVal by viewModel.goalLimit.collectAsState()
-                val limitReached = goalsList.size >= goalLimitVal && !isPremium
+                val limitReached = goalsList.size >= goalLimitVal && !isPremium && isGoalLimitPremiumLocked
 
                 if (limitReached) {
                     Box(
@@ -3772,6 +3786,194 @@ fun AriseSleepTab(
 // ========== 5. STATS & PERSONALIZATION ====
 // ===========================================
 @Composable
+fun AnalyticsDashboard(
+    sleepLogs: List<com.example.core.database.SleepLog>,
+    habits: List<com.example.core.database.Habit>,
+    completions: List<com.example.core.database.HabitCompletion>,
+    goals: List<com.example.core.database.Goal>,
+    colors: CustomColorScheme,
+    fontFamily: FontFamily
+) {
+    val validLogs = sleepLogs.filter { it.wakeTime > it.bedTime }
+    val avgSleep = if (validLogs.isEmpty()) 7.5f else {
+        validLogs.map { (it.wakeTime - it.bedTime) / 3600000f }.average().toFloat()
+    }
+    
+    val wakeSuccessRate = if (sleepLogs.isEmpty()) 100 else {
+        val goodMoods = sleepLogs.filter { it.wakeMood.contains("Good") || it.wakeMood == "Good" }.size
+        (goodMoods * 100) / sleepLogs.size
+    }
+
+    val habitConsistency = if (habits.isEmpty()) 0 else {
+        val totalTargets = habits.size * 7
+        val completionCount = completions.filter { it.completionTimestamp >= System.currentTimeMillis() - 7 * 24 * 3600 * 1000L }.size
+        ((completionCount.toFloat() / totalTargets.toFloat()) * 100).coerceIn(0f, 100f).toInt()
+    }
+
+    val goalsCompletionRate = if (goals.isEmpty()) 0 else {
+        val completed = goals.filter { it.currentProgress >= it.targetProgress }.size
+        (completed * 100) / goals.size
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.cardBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Wake Success", fontFamily = fontFamily, fontSize = 11.sp, color = colors.onSurface.copy(alpha = 0.6f))
+                    Text("$wakeSuccessRate%", fontFamily = fontFamily, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                }
+            }
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.cardBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Avg Sleep", fontFamily = fontFamily, fontSize = 11.sp, color = colors.onSurface.copy(alpha = 0.6f))
+                    Text(String.format(java.util.Locale.US, "%.1fh", avgSleep), fontFamily = fontFamily, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.secondary)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.cardBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Habit Power", fontFamily = fontFamily, fontSize = 11.sp, color = colors.onSurface.copy(alpha = 0.6f))
+                    Text("$habitConsistency%", fontFamily = fontFamily, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                }
+            }
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                border = BorderStroke(1.dp, colors.cardBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Missions Done", fontFamily = fontFamily, fontSize = 11.sp, color = colors.onSurface.copy(alpha = 0.6f))
+                    Text("$goalsCompletionRate%", fontFamily = fontFamily, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.secondary)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = BorderStroke(1.dp, colors.cardBorder),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "REAL-TIME SLEEP LOG HISTORY (7 PERIODS)",
+                    fontFamily = fontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.primary
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+
+                val last7Logs = sleepLogs.sortedBy { it.bedTime }.takeLast(7)
+                if (last7Logs.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(140.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No sleep data recorded in logs yet.",
+                            fontFamily = fontFamily,
+                            fontSize = 12.sp,
+                            color = colors.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+                } else {
+                    val maxLogDuration = last7Logs.map { 
+                        if (it.wakeTime > it.bedTime) (it.wakeTime - it.bedTime) / 3600000f else 0f
+                    }.maxOrNull()?.coerceAtLeast(8f) ?: 8f
+
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .padding(horizontal = 8.dp)
+                    ) {
+                        val canvasWidth = size.width
+                        val canvasHeight = size.height
+                        val barCount = last7Logs.size
+                        val spacing = 12.dp.toPx()
+                        val barWidth = (canvasWidth - (spacing * (barCount + 1))) / barCount
+
+                        val lineY = canvasHeight - ((8.0f / maxLogDuration) * (canvasHeight - 20.dp.toPx())) - 10.dp.toPx()
+                        drawLine(
+                            color = colors.secondary.copy(alpha = 0.4f),
+                            start = androidx.compose.ui.geometry.Offset(0f, lineY),
+                            end = androidx.compose.ui.geometry.Offset(canvasWidth, lineY),
+                            strokeWidth = 1.dp.toPx(),
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                        )
+
+                        last7Logs.forEachIndexed { idx, log ->
+                            val hours = if (log.wakeTime > log.bedTime) (log.wakeTime - log.bedTime) / 3600000f else 0f
+                            val barHeight = (hours / maxLogDuration) * (canvasHeight - 30.dp.toPx())
+                            val left = spacing + idx * (barWidth + spacing)
+                            val top = canvasHeight - barHeight - 15.dp.toPx()
+
+                            drawRoundRect(
+                                color = colors.primary,
+                                topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                                size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()),
+                                alpha = 0.95f
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        last7Logs.forEachIndexed { index, log ->
+                            val df = java.text.SimpleDateFormat("MM/dd", java.util.Locale.getDefault())
+                            val dateStr = df.format(java.util.Date(log.bedTime))
+                            val hours = if (log.wakeTime > log.bedTime) (log.wakeTime - log.bedTime) / 3600000f else 0f
+                            
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.1fh", hours),
+                                    fontFamily = fontFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.primary
+                                )
+                                Text(
+                                    text = dateStr,
+                                    fontFamily = fontFamily,
+                                    fontSize = 9.sp,
+                                    color = colors.onSurface.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun AriseStatsCustomizeTab(
     viewModel: AriseViewModel,
     colors: CustomColorScheme,
@@ -3799,6 +4001,16 @@ fun AriseStatsCustomizeTab(
     val isAdminModeActive by viewModel.isAdminMode.collectAsState()
     val userRole by viewModel.userRole.collectAsState()
 
+    val isPremiumInitiallyFree by viewModel.isPremiumInitiallyFree.collectAsState()
+    val premiumExpiryTime by viewModel.premiumExpiryTime.collectAsState()
+    val forcePremiumOverride by viewModel.forcePremiumOverride.collectAsState()
+    val isSkinsPremiumLocked by viewModel.isSkinsPremiumLocked.collectAsState()
+    val isColorsPremiumLocked by viewModel.isColorsPremiumLocked.collectAsState()
+    val isSoundsPremiumLocked by viewModel.isSoundsPremiumLocked.collectAsState()
+    val isBackupPremiumLocked by viewModel.isBackupPremiumLocked.collectAsState()
+    val isHabitLimitPremiumLocked by viewModel.isHabitLimitPremiumLocked.collectAsState()
+    val isGoalLimitPremiumLocked by viewModel.isGoalLimitPremiumLocked.collectAsState()
+
     var customPinInput by remember { mutableStateOf("") }
     var inputRestoreText by remember { mutableStateOf("") }
     var restoreMessage by remember { mutableStateOf("") }
@@ -3810,49 +4022,14 @@ fun AriseStatsCustomizeTab(
     ) {
         // --- Wake Statistics Subpanel ---
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
-                border = BorderStroke(1.dp, colors.cardBorder),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "ON-DEVICE DIAGNOSTIC HISTOGRAMS & SUCCESS",
-                        fontFamily = fontFamily,
-                        color = colors.primary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    val wakeSuccessRate = if (sleepLogsList.isEmpty()) 100 else {
-                        val goodMoods = sleepLogsList.filter { it.wakeMood != "Tired" }.size
-                        (goodMoods * 100) / sleepLogsList.size
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text("Wake Success Rate", fontFamily = fontFamily, fontSize = 12.sp, color = colors.onSurface)
-                            Text("$wakeSuccessRate%", fontFamily = fontFamily, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = colors.primary)
-                        }
-                        Column {
-                            Text("Active Alarms", fontFamily = fontFamily, fontSize = 12.sp, color = colors.onSurface)
-                            Text("${alarmsList.filter { it.isActive }.size}", fontFamily = fontFamily, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = colors.onSurface)
-                        }
-                        Column {
-                            Text("Streaks Active", fontFamily = fontFamily, fontSize = 12.sp, color = colors.onSurface)
-                            val totalStreaks = goalsList.sumOf { it.streakCount }
-                            Text("$totalStreaks days", fontFamily = fontFamily, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = colors.onSurface)
-                        }
-                    }
-                }
-            }
+            AnalyticsDashboard(
+                sleepLogs = sleepLogsList,
+                habits = habitsList,
+                completions = completionsList,
+                goals = goalsList,
+                colors = colors,
+                fontFamily = fontFamily
+            )
         }
 
         // --- Skins & Theme Personalization Subpanel ---
@@ -3885,7 +4062,7 @@ fun AriseStatsCustomizeTab(
                             val isSkinPremium = skin == "Classic" || skin == "Nature" || skin == "Cosmic Void" || skin == "Neon Synthwave"
                             Button(
                                 onClick = {
-                                    if (isSkinPremium && !isPremium) {
+                                    if (isSkinPremium && !isPremium && isSkinsPremiumLocked) {
                                         showPremiumUnlockDialog = true
                                     } else {
                                         viewModel.updateAppSkin(skin)
@@ -3898,7 +4075,7 @@ fun AriseStatsCustomizeTab(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(skin, color = if (currentSkin == skin) colors.onPrimary else colors.onBackground, fontFamily = fontFamily, fontSize = 11.sp)
-                                    if (isSkinPremium && !isPremium) {
+                                    if (isSkinPremium && !isPremium && isSkinsPremiumLocked) {
                                         Spacer(modifier = Modifier.width(3.dp))
                                         Text("👑", fontSize = 10.sp)
                                     }
@@ -3935,7 +4112,7 @@ fun AriseStatsCustomizeTab(
                                         shape = CircleShape
                                     )
                                     .clickable {
-                                        if (isColorPremium && !isPremium) {
+                                        if (isColorPremium && !isPremium && isColorsPremiumLocked) {
                                             showPremiumUnlockDialog = true
                                         } else {
                                             viewModel.updateAccentColor(hex)
@@ -3944,7 +4121,7 @@ fun AriseStatsCustomizeTab(
                                     .testTag("accent_${hex.substring(1)}"),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (isColorPremium && !isPremium) {
+                                if (isColorPremium && !isPremium && isColorsPremiumLocked) {
                                     Text("👑", fontSize = 9.sp)
                                 }
                             }
@@ -4336,7 +4513,7 @@ fun AriseStatsCustomizeTab(
                     ) {
                         Button(
                             onClick = {
-                                if (!isPremium) {
+                                if (!isPremium && isBackupPremiumLocked) {
                                     showPremiumUnlockDialog = true
                                 } else {
                                     viewModel.uploadBackupToSupabase()
@@ -4347,7 +4524,7 @@ fun AriseStatsCustomizeTab(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Cloud Backup", color = colors.onPrimary, fontFamily = fontFamily, fontSize = 11.sp)
-                                if (!isPremium) {
+                                if (!isPremium && isBackupPremiumLocked) {
                                     Spacer(modifier = Modifier.width(3.dp))
                                     Text("👑", fontSize = 10.sp)
                                 }
@@ -4356,7 +4533,7 @@ fun AriseStatsCustomizeTab(
 
                         Button(
                             onClick = {
-                                if (!isPremium) {
+                                if (!isPremium && isBackupPremiumLocked) {
                                     showPremiumUnlockDialog = true
                                 } else {
                                     viewModel.restoreBackupFromSupabase()
@@ -4367,7 +4544,7 @@ fun AriseStatsCustomizeTab(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Cloud Restore", color = Color.White, fontFamily = fontFamily, fontSize = 11.sp)
-                                if (!isPremium) {
+                                if (!isPremium && isBackupPremiumLocked) {
                                     Spacer(modifier = Modifier.width(3.dp))
                                     Text("👑", fontSize = 10.sp)
                                 }
@@ -4459,18 +4636,142 @@ fun AriseStatsCustomizeTab(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Text("USER PREMIUM SIMULATION", fontFamily = fontFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                        Text("👑 GLOBAL LICENSING SETTINGS", fontFamily = fontFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Force Override Premium Status: ${if (isPremium) "ACTIVE" else "DISABLED"}", fontFamily = fontFamily, fontSize = 12.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Initially Free for Everyone", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Gives all users premium status out-of-the-box initially.", fontFamily = fontFamily, fontSize = 9.sp, color = colors.onSurface.copy(alpha = 0.6f))
+                            }
                             Switch(
-                                checked = isPremium,
-                                onCheckedChange = { viewModel.setPremiumStatus(it) },
+                                checked = isPremiumInitiallyFree,
+                                onCheckedChange = { viewModel.setPremiumInitiallyFree(it) },
                                 colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Force Admin Override", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Instantly bypasses premium check for your device.", fontFamily = fontFamily, fontSize = 9.sp, color = colors.onSurface.copy(alpha = 0.6f))
+                            }
+                            Switch(
+                                checked = forcePremiumOverride,
+                                onCheckedChange = { viewModel.setForcePremiumOverride(it) },
+                                colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("⏳ TIME-BASED PRE-LICENSING CALIBRATOR", fontFamily = fontFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        val displayExpiryText = remember(premiumExpiryTime) {
+                            if (premiumExpiryTime <= 0L) {
+                                "No Expiry Active (Lifetime / Default Free / Off)"
+                            } else {
+                                val remaining = premiumExpiryTime - System.currentTimeMillis()
+                                if (remaining <= 0) {
+                                    "Expired on ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(premiumExpiryTime))}"
+                                } else {
+                                    val days = remaining / (24L * 3600 * 1000)
+                                    val hours = (remaining % (24L * 3600 * 1000)) / (3600 * 1000)
+                                    "Expires in ${days}d ${hours}h (${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(premiumExpiryTime))})"
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "Current License Expiry: $displayExpiryText",
+                            fontFamily = fontFamily,
+                            fontSize = 11.sp,
+                            color = colors.onSurface.copy(alpha = 0.85f),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val now = System.currentTimeMillis()
+                            val baseTime = if (premiumExpiryTime > now) premiumExpiryTime else now
+
+                            Button(
+                                onClick = { viewModel.setPremiumExpiryTime(baseTime + 24L * 3600 * 1000) },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.15f), contentColor = colors.primary),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("+1 Day", fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                            }
+                            Button(
+                                onClick = { viewModel.setPremiumExpiryTime(baseTime + 7L * 24 * 3600 * 1000) },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.15f), contentColor = colors.primary),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("+7 Days", fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                            }
+                            Button(
+                                onClick = { viewModel.setPremiumExpiryTime(baseTime + 30L * 24 * 3600 * 1000) },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.15f), contentColor = colors.primary),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("+30 Days", fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                            }
+                            Button(
+                                onClick = { viewModel.setPremiumExpiryTime(0L) },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.divider.copy(alpha = 0.15f), contentColor = colors.onSurface),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("Reset / 0", fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("🛡️ MANAGE PREMIUM GATING RULES", fontFamily = fontFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        val gatingRules = listOf(
+                            Triple("Theme App Skins require Premium", isSkinsPremiumLocked, { v: Boolean -> viewModel.setSkinsPremiumLocked(v) }),
+                            Triple("Theme Accent Colors require Premium", isColorsPremiumLocked, { v: Boolean -> viewModel.setColorsPremiumLocked(v) }),
+                            Triple("Special Alarm Audio require Premium", isSoundsPremiumLocked, { v: Boolean -> viewModel.setSoundsPremiumLocked(v) }),
+                            Triple("Cloud Supabase Backup require Premium", isBackupPremiumLocked, { v: Boolean -> viewModel.setBackupPremiumLocked(v) }),
+                            Triple("Enforce Habit Creation Limits", isHabitLimitPremiumLocked, { v: Boolean -> viewModel.setHabitLimitPremiumLocked(v) }),
+                            Triple("Enforce Goal Creation Limits", isGoalLimitPremiumLocked, { v: Boolean -> viewModel.setGoalLimitPremiumLocked(v) })
+                        )
+
+                        gatingRules.forEach { (label, checked, onToggle) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(label, fontFamily = fontFamily, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                                Switch(
+                                    checked = checked,
+                                    onCheckedChange = { onToggle(it) },
+                                    colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -4478,7 +4779,7 @@ fun AriseStatsCustomizeTab(
                         Text("FREE USER RESOURCE LIMITS", fontFamily = fontFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.primary)
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Max Free Habits: $currentHabitLimit", modifier = Modifier.width(140.dp), fontFamily = fontFamily, fontSize = 12.sp)
+                            Text("Max Free Habits: $currentHabitLimit", modifier = Modifier.width(140.dp), fontFamily = fontFamily, fontSize = 11.sp)
                             Slider(
                                 value = currentHabitLimit.toFloat(),
                                 onValueChange = { viewModel.setHabitLimit(it.toInt()) },
@@ -4488,7 +4789,7 @@ fun AriseStatsCustomizeTab(
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Max Free Goals: $currentGoalLimit", modifier = Modifier.width(140.dp), fontFamily = fontFamily, fontSize = 12.sp)
+                            Text("Max Free Goals: $currentGoalLimit", modifier = Modifier.width(140.dp), fontFamily = fontFamily, fontSize = 11.sp)
                             Slider(
                                 value = currentGoalLimit.toFloat(),
                                 onValueChange = { viewModel.setGoalLimit(it.toInt()) },

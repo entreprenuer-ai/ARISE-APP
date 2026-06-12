@@ -54,6 +54,13 @@ class AlarmViewModel(
     private val _currentCountBackward = MutableStateFlow(100)
     val currentCountBackward: StateFlow<Int> = _currentCountBackward.asStateFlow()
 
+    private val _selectedWakeMood = MutableStateFlow("Neutral")
+    val selectedWakeMood: StateFlow<String> = _selectedWakeMood.asStateFlow()
+
+    fun setSelectedWakeMood(mood: String) {
+        _selectedWakeMood.value = mood
+    }
+
     val wakeQuotes = listOf(
         "Arise, awake, and stop not until the goal is reached.",
         "The best way to predict your future is to create it.",
@@ -104,6 +111,41 @@ class AlarmViewModel(
         if (alarm != null) {
             viewModelScope.launch {
                 val now = System.currentTimeMillis()
+                val wakeMood = _selectedWakeMood.value
+                try {
+                    val logs = repository.allSleepLogs.first()
+                    val openLog = logs.firstOrNull { it.wakeTime == 0L }
+                    if (openLog != null) {
+                        val hours = (now - openLog.bedTime) / 3600000f
+                        val debt = (openLog.targetHours - hours).coerceAtLeast(0f)
+                        repository.insertSleepLog(
+                            openLog.copy(
+                                wakeTime = now,
+                                wakeMood = wakeMood,
+                                sleepDebtHours = debt
+                            )
+                        )
+                    } else {
+                        val eightHoursAgo = now - 8 * 3600 * 1000L
+                        val targetStr = repository.getSetting("sleep_target_hours") ?: "8.0"
+                        val customTarget = targetStr.toFloatOrNull() ?: 8.0f
+                        val sleptHours = 8.0f
+                        val debt = (customTarget - sleptHours).coerceAtLeast(0f)
+                        repository.insertSleepLog(
+                            com.example.core.database.SleepLog(
+                                bedTime = eightHoursAgo,
+                                wakeTime = now,
+                                wakeMood = wakeMood,
+                                sleepDebtHours = debt,
+                                targetHours = customTarget,
+                                notes = "Auto-logged on alarm dismiss"
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("AlarmViewModel", "Failed to sync wake mood to sleep logs", e)
+                }
+
                 // If snooze limit reached or simple completion
                 if (alarm.snoozeLimit > 0 && alarm.snoozeCount >= alarm.snoozeLimit) {
                     repository.insertAlarm(alarm.copy(snoozeCount = 0))
@@ -111,12 +153,16 @@ class AlarmViewModel(
             }
             _activeTriggeredAlarm.value = null
             _strobeActive.value = false
+            _selectedWakeMood.value = "Neutral"
         }
     }
 
     fun snoozeActiveAlarm() {
         val alarm = _activeTriggeredAlarm.value
         if (alarm != null && alarm.snoozeEnabled) {
+            if (alarm.snoozeLimit > 0 && alarm.snoozeCount >= alarm.snoozeLimit) {
+                return // Locked! Snooze limit reached.
+            }
             val updatedSnoozeCount = alarm.snoozeCount + 1
             val nextSnoozeMins = if (alarm.isSmartSnooze) {
                 (alarm.snoozeDurationMinutes - updatedSnoozeCount).coerceAtLeast(1)

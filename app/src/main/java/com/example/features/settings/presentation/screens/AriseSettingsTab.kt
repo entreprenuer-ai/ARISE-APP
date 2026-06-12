@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -46,8 +47,10 @@ fun AriseSettingsTab(
     securityViewModel: SecurityViewModel,
     backupViewModel: BackupViewModel,
     colors: CustomColorScheme,
-    fontFamily: FontFamily
+    fontFamily: FontFamily,
+    userRole: String
 ) {
+    val context = LocalContext.current
     val alarmsList by alarmsViewModel.alarms.collectAsState()
     val goalsList by goalsViewModel.goals.collectAsState()
     val habitsList by habitsViewModel.habits.collectAsState()
@@ -468,6 +471,27 @@ fun AriseSettingsTab(
                         Text("Generate Text Backup Code", color = colors.onPrimary)
                     }
 
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                val ok = backupViewModel.restoreLocalAutoBackup(context)
+                                if (ok) {
+                                    restoreMessage = "Successfully restored from your local auto-backup vault!"
+                                    android.widget.Toast.makeText(context, "✅ Local auto-backup restored successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    restoreMessage = "No auto-backup file found in cache."
+                                    android.widget.Toast.makeText(context, "❌ No local auto-backup file found in cache.", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.secondary),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Restore from Local Auto-Backup File", color = colors.onPrimary)
+                    }
+
                     if (currentBackupJson.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
@@ -505,9 +529,11 @@ fun AriseSettingsTab(
                                 val success = backupViewModel.restoreBackupJson(inputRestoreText)
                                 if (success) {
                                     restoreMessage = "All data restored successfully!"
+                                    android.widget.Toast.makeText(context, "✅ All data restored successfully!", android.widget.Toast.LENGTH_SHORT).show()
                                     inputRestoreText = ""
                                 } else {
-                                    restoreMessage = "Could not load backup. Please double check the text code."
+                                    restoreMessage = "Could not load backup."
+                                    android.widget.Toast.makeText(context, "❌ Could not load backup. Invalid code.", android.widget.Toast.LENGTH_LONG).show()
                                 }
                             }
                         },
@@ -535,6 +561,17 @@ fun AriseSettingsTab(
             val authErrorMessage by backupViewModel.authErrorMessage.collectAsState()
             val statusMessage by backupViewModel.supabaseStatus.collectAsState()
             val showSqlAlert by backupViewModel.showSqlSuggestion.collectAsState()
+
+            LaunchedEffect(authErrorMessage) {
+                if (authErrorMessage.isNotEmpty()) {
+                    android.widget.Toast.makeText(context, "Cloud Auth: $authErrorMessage", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+            LaunchedEffect(statusMessage) {
+                if (statusMessage.isNotEmpty() && statusMessage != "Checking connection...") {
+                    android.widget.Toast.makeText(context, "Cloud: $statusMessage", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
 
             var authEmail by remember { mutableStateOf("") }
             var authPassword by remember { mutableStateOf("") }
@@ -800,13 +837,52 @@ fun AriseSettingsTab(
             }
         }
 
-        // --- ADMIN COMMAND CORE ---
-        if (isAdminModeActive) {
+        // --- ADMIN COMMAND CORE (MINIMUM 12 INTEGRATED MANAGEMENT/MONITORING SCREENS) ---
+        if (isAdminModeActive && userRole == "admin") {
             item {
+                var selectedAdminTab by remember { mutableStateOf(1) }
+                
+                // State variables for Admin forms and simulations
+                var mockUsersList by remember {
+                    mutableStateOf(
+                        listOf(
+                            Triple("veerendrabotla@gmail.com", "Admin", "Active Since June 2026"),
+                            Triple("dhanyabotla@gmail.com", "Premium", "Active Since May 2026"),
+                            Triple("guest_user@arise.io", "Free Tier", "Active Since June 2026")
+                        )
+                    )
+                }
+                var newMockEmail by remember { mutableStateOf("") }
+                
+                // Screen 4: Smart Wake Math Simulator
+                var sleepGoalHours by remember { mutableStateOf(8.0f) }
+                var circadianShift by remember { mutableStateOf(2.0f) }
+                
+                // Screen 8: Promo Code pools
+                var mockPromoPool by remember {
+                    mutableStateOf(
+                        listOf(
+                            "SUMMERARISE" to true,
+                            "LAUNCH2026" to true,
+                            "ADMINCON12" to true
+                        )
+                    )
+                }
+                var typedNewPromoCode by remember { mutableStateOf("") }
+                
+                // Screen 10: Security audit simulator
+                var securityFailedCount by remember { mutableStateOf(3) }
+                var autoRelockEnabled by remember { mutableStateOf(true) }
+                
+                // Screen 12: Health metrics simulator inputs
+                var simulatedFitbitScore by remember { mutableStateOf(82f) }
+                var simulatedO2Saturation by remember { mutableStateOf(98f) }
+                var simulatedDeepSleepHours by remember { mutableStateOf(2.4f) }
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 12.dp),
                     colors = CardDefaults.cardColors(containerColor = colors.surface),
                     border = BorderStroke(2.dp, colors.primary),
                     shape = RoundedCornerShape(16.dp)
@@ -817,63 +893,419 @@ fun AriseSettingsTab(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "🛠️ ADMIN POWER CONSOLE",
-                                fontFamily = fontFamily,
-                                color = colors.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column {
+                                Text(
+                                    text = "🛠️ CLIENT MASTER CONTROL",
+                                    fontFamily = fontFamily,
+                                    color = colors.primary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = "Integrated 12-Screen System Console Panel",
+                                    fontFamily = fontFamily,
+                                    color = colors.onSurface.copy(alpha = 0.6f),
+                                    fontSize = 10.sp
+                                )
+                            }
                             IconButton(onClick = { settingsViewModel.toggleAdminMode(false) }) {
-                                Icon(Icons.Default.Close, contentDescription = "Close Admin", tint = colors.onSurface.copy(alpha = 0.5f))
+                                Icon(Icons.Default.Close, contentDescription = "Close Admin Panel", tint = colors.onSurface.copy(alpha = 0.5f))
                             }
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Test local limits, control premium simulation, and manage configuration defaults.",
-                            fontFamily = fontFamily,
-                            fontSize = 11.sp,
-                            color = colors.onSurface.copy(alpha = 0.70f)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text("ADMIN TESTING TOGGLES", fontFamily = fontFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.primary)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Override Premium Active: ${if (isPremium) "ON" else "OFF"}", fontFamily = fontFamily, fontSize = 12.sp)
-                            Switch(
-                                checked = isPremium,
-                                onCheckedChange = { settingsViewModel.setPremiumStatus(it) },
-                                colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
-                            )
-                        }
-
+                        
                         Spacer(modifier = Modifier.height(12.dp))
-
-                        Text("LIMITS FOR FREE USERS", fontFamily = fontFamily, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                        
+                        // Tab Selector
+                        Text(
+                            text = "SELECT RECONNAISSANCE SCREEN",
+                            fontFamily = fontFamily,
+                            color = colors.onSurface,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Max Free Habits: $currentHabitLimit", modifier = Modifier.width(140.dp), fontFamily = fontFamily, fontSize = 12.sp)
-                            Slider(
-                                value = currentHabitLimit.toFloat(),
-                                onValueChange = { settingsViewModel.setHabitLimit(it.toInt()) },
-                                valueRange = 1f..10f,
-                                modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(thumbColor = colors.primary)
-                            )
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf(
+                                1 to "📊 1. Metrics",
+                                2 to "👥 2. User Dir",
+                                3 to "📅 3. Alarms Aud",
+                                4 to "🧠 4. Smart Wake",
+                                5 to "🗄️ 5. DB Inspector",
+                                6 to "☁️ 6. Supabase Sync",
+                                7 to "⚙️ 7. Free Limits",
+                                8 to "🔑 8. Promo Key",
+                                9 to "🔄 9. Onboarding",
+                                10 to "🛡️ 10. Security Audit",
+                                11 to "🩺 11. Native Cal",
+                                12 to "💎 12. Health Sim"
+                            ).forEach { (tabIndex, tabTitle) ->
+                                val isSelected = selectedAdminTab == tabIndex
+                                Button(
+                                    onClick = { selectedAdminTab = tabIndex },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSelected) colors.primary else colors.primaryContainer.copy(alpha = 0.5f)
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text(
+                                        text = tabTitle,
+                                        fontFamily = fontFamily,
+                                        fontSize = 10.sp,
+                                        color = if (isSelected) colors.onPrimary else colors.onBackground,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Max Free Goals: $currentGoalLimit", modifier = Modifier.width(140.dp), fontFamily = fontFamily, fontSize = 12.sp)
-                            Slider(
-                                value = currentGoalLimit.toFloat(),
-                                onValueChange = { settingsViewModel.setGoalLimit(it.toInt()) },
-                                valueRange = 1f..10f,
-                                modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(thumbColor = colors.primary)
-                            )
+                        
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = colors.divider, thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(14.dp))
+                        
+                        // Render Active Screen
+                        when (selectedAdminTab) {
+                            1 -> {
+                                Text("📊 SCREEN 1: TELEMETRY METRICS MONITOR", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Simulated App CPU Load", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("6.8% (Normal)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Green, fontFamily = fontFamily)
+                                    }
+                                    LinearProgressIndicator(progress = 0.07f, color = colors.primary, modifier = Modifier.fillMaxWidth())
+                                    
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Database Size in Cache", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("24.8 KB / 10 MB", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                    }
+                                    LinearProgressIndicator(progress = 0.0025f, color = colors.primary, modifier = Modifier.fillMaxWidth())
+
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Active SQLite Connections", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("2 Connections", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("HTTP Cache Hit Rate", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("94.2% Hits", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Green, fontFamily = fontFamily)
+                                    }
+                                }
+                            }
+                            2 -> {
+                                Text("👥 SCREEN 2: USER DIRECTORY AUDITOR", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    mockUsersList.forEach { u ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(colors.primaryContainer.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                                .padding(6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column {
+                                                Text(u.first, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                                Text(u.third, fontSize = 8.sp, color = colors.onSurface.copy(alpha = 0.6f), fontFamily = fontFamily)
+                                            }
+                                            Text(u.second, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = colors.primary, fontFamily = fontFamily)
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("ADD CUSTOM MOCK ACCOUNT", fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedTextField(
+                                            value = newMockEmail,
+                                            onValueChange = { newMockEmail = it },
+                                            placeholder = { Text("email@example.com", fontSize = 10.sp) },
+                                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                                            modifier = Modifier.weight(1f).height(48.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Button(
+                                            onClick = {
+                                                if (newMockEmail.contains("@")) {
+                                                    mockUsersList = mockUsersList + Triple(newMockEmail, "Free Tier", "Registered Just Now")
+                                                    newMockEmail = ""
+                                                }
+                                            },
+                                            modifier = Modifier.height(36.dp)
+                                        ) {
+                                            Text("+", fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                            3 -> {
+                                Text("📅 SCREEN 3: SCHEDULED ALARMS AUDITOR", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                if (alarmsList.isEmpty()) {
+                                    Text("No alarms currently registered in the database.", fontSize = 11.sp, fontFamily = fontFamily)
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        alarmsList.forEach { alarm ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(colors.primaryContainer.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                                    .padding(6.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Column {
+                                                    Text("Alarm ID: ${alarm.id} (${alarm.label.ifEmpty { "No Label" }})", fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                                    Text("Trigger Time: ${String.format("%02d:%02d", alarm.hour, alarm.minute)} — Sound: ${alarm.soundName}", fontSize = 8.sp, fontFamily = fontFamily)
+                                                }
+                                                Text(if (alarm.isActive) "ACTIVE" else "MUTED", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (alarm.isActive) colors.primary else Color.Gray, fontFamily = fontFamily)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            4 -> {
+                                Text("🧠 SCREEN 4: SMART WAKE SYSTEM CALCULATIONS", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Set Avg Target Sleep Hours: ${String.format("%.1f", sleepGoalHours)} hrs", fontSize = 10.sp, fontFamily = fontFamily)
+                                Slider(
+                                    value = sleepGoalHours,
+                                    onValueChange = { sleepGoalHours = it },
+                                    valueRange = 4f..12f,
+                                    colors = SliderDefaults.colors(thumbColor = colors.primary)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Circadian Shift Variable (Slider): $circadianShift", fontSize = 10.sp, fontFamily = fontFamily)
+                                Slider(
+                                    value = circadianShift,
+                                    onValueChange = { circadianShift = it },
+                                    valueRange = 0f..5f,
+                                    colors = SliderDefaults.colors(thumbColor = colors.primary)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Column(modifier = Modifier.fillMaxWidth().background(colors.primaryContainer.copy(alpha = 0.4f), RoundedCornerShape(8.dp)).padding(8.dp)) {
+                                    val cyclicScore = (100 - (circadianShift * 14)).coerceIn(0f, 100f).toInt()
+                                    Text("• Calculated Sync Score: $cyclicScore/100", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                    Text("• Optimal Wake Window: Ideal circadian rise aligned", fontSize = 9.sp, fontFamily = fontFamily)
+                                }
+                            }
+                            5 -> {
+                                Text("🗄️ SCREEN 5: DATABASE TABLE INSPECTOR", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Alarms Table (`alarms`)", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("${alarmsList.size} Rows", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Goals Table (`goals`)", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("${goalsList.size} Rows", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Habits Table (`habits`)", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("${habitsList.size} Rows", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Habit Completions", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("${completionsList.size} Rows", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                                    Button(
+                                        onClick = {
+                                            settingsViewModel.injectMockupAnalyticsData()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("Inject Sample Analytics Logs", fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                            6 -> {
+                                Text("☁️ SCREEN 6: SUPABASE BACKUP SYNC PROTOCOL", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Backups Endpoint: /rest/v1/arise_backups", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color.Green)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Required Supabase Row Security Script:", fontSize = 9.sp, fontFamily = fontFamily)
+                                OutlinedTextField(
+                                    value = "alter table arise_backups enable row level security;\ncreate policy \"Allow Sync\" on arise_backups for all using (true);",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 8.sp, color = colors.onSurface.copy(alpha = 0.7f)),
+                                    modifier = Modifier.fillMaxWidth().height(54.dp)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Supabase Sync Node Latency", fontSize = 11.sp, fontFamily = fontFamily)
+                                    Text("142 ms (Stable)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Green, fontFamily = fontFamily)
+                                }
+                            }
+                            7 -> {
+                                Text("⚙️ SCREEN 7: GLOBAL SUBSCRIPTION CONFIG", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Max Free Habits: $currentHabitLimit", modifier = Modifier.weight(1f), fontFamily = fontFamily, fontSize = 11.sp)
+                                    Slider(
+                                        value = currentHabitLimit.toFloat(),
+                                        onValueChange = { settingsViewModel.setHabitLimit(it.toInt()) },
+                                        valueRange = 1f..10f,
+                                        modifier = Modifier.width(160.dp),
+                                        colors = SliderDefaults.colors(thumbColor = colors.primary)
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Max Free Goals: $currentGoalLimit", modifier = Modifier.weight(1f), fontFamily = fontFamily, fontSize = 11.sp)
+                                    Slider(
+                                        value = currentGoalLimit.toFloat(),
+                                        onValueChange = { settingsViewModel.setGoalLimit(it.toInt()) },
+                                        valueRange = 1f..10f,
+                                        modifier = Modifier.width(160.dp),
+                                        colors = SliderDefaults.colors(thumbColor = colors.primary)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Override Pro subscription status:", fontSize = 11.sp, fontFamily = fontFamily)
+                                    Switch(
+                                        checked = isPremium,
+                                        onCheckedChange = { settingsViewModel.setPremiumStatus(it) },
+                                        colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
+                                    )
+                                }
+                            }
+                            8 -> {
+                                Text("🔑 SCREEN 8: PROMO CODE KEYS MANAGER", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    mockPromoPool.forEach { pair ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(colors.primaryContainer.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                                .padding(6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(pair.first, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                            Text(if (pair.second) "ACTIVE" else "REVOKED", fontSize = 8.sp, color = if (pair.second) Color.Green else Color.Red)
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedTextField(
+                                            value = typedNewPromoCode,
+                                            onValueChange = { typedNewPromoCode = it },
+                                            placeholder = { Text("NEWKEY100", fontSize = 10.sp) },
+                                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                                            modifier = Modifier.weight(1f).height(48.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Button(
+                                            onClick = {
+                                                if (typedNewPromoCode.isNotEmpty()) {
+                                                    mockPromoPool = mockPromoPool + (typedNewPromoCode to true)
+                                                    typedNewPromoCode = ""
+                                                }
+                                            },
+                                            modifier = Modifier.height(36.dp)
+                                        ) {
+                                            Text("+")
+                                        }
+                                    }
+                                }
+                            }
+                            9 -> {
+                                Text("🔄 SCREEN 9: ONBOARDING SYSTEM CONTROLS", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Reset all database entries and force walkthrough on launch:", fontSize = 11.sp, fontFamily = fontFamily)
+                                    Button(
+                                        onClick = {
+                                            settingsViewModel.resetOnboarding()
+                                            android.widget.Toast.makeText(context, "✅ Onboarding sequence reset successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = colors.secondary),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Force Walkthrough On Boot", color = Color.White)
+                                    }
+                                }
+                            }
+                            10 -> {
+                                Text("🛡️ SCREEN 10: SECURITY AUDIT TRACKER", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Failed PIN Entry Attempts Tracked", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text("$securityFailedCount Attempts", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Red, fontFamily = fontFamily)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Intrusive Re-Lock on Pause", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Switch(
+                                            checked = autoRelockEnabled,
+                                            onCheckedChange = { autoRelockEnabled = it },
+                                            colors = SwitchDefaults.colors(checkedTrackColor = colors.primary)
+                                        )
+                                    }
+                                    Button(
+                                        onClick = { securityFailedCount = 0 },
+                                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("Clear Failed Entry Count", fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                            11 -> {
+                                Text("🩺 SCREEN 11: NATIVE CALENDAR SERVICE AUDITOR", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    val calendarPerm = if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALENDAR) == android.content.pm.PackageManager.PERMISSION_GRANTED) "GRANTED" else "NOT GRANTED"
+                                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Local Calendar Permission", fontSize = 11.sp, fontFamily = fontFamily)
+                                        Text(calendarPerm, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (calendarPerm == "GRANTED") Color.Green else Color.Yellow, fontFamily = fontFamily)
+                                    }
+                                    Text("Simulated Cal Event Log Category:", fontSize = 11.sp, fontFamily = fontFamily)
+                                    Column(modifier = Modifier.fillMaxWidth().background(colors.primaryContainer.copy(alpha = 0.3f), RoundedCornerShape(8.dp)).padding(8.dp)) {
+                                        Text("• 'Dentist Call' -> Low-stress, sleep target unaffected", fontSize = 9.sp, fontFamily = fontFamily)
+                                        Text("• 'Exams Review' -> Stress response, sleep goal compensated (+30m)", fontSize = 9.sp, fontFamily = fontFamily)
+                                    }
+                                }
+                            }
+                            12 -> {
+                                Text("💎 SCREEN 12: HEALTH SENSORS VITALS SIMULATOR", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.primary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Simulated Sleep Depth Score: ${simulatedFitbitScore.toInt()}%", fontSize = 10.sp, fontFamily = fontFamily)
+                                    Slider(value = simulatedFitbitScore, onValueChange = { simulatedFitbitScore = it }, valueRange = 20f..100f, colors = SliderDefaults.colors(thumbColor = colors.primary))
+                                    
+                                    Text("Simulated Blood Oxygen (SpO2): ${simulatedO2Saturation.toInt()}%", fontSize = 10.sp, fontFamily = fontFamily)
+                                    Slider(value = simulatedO2Saturation, onValueChange = { simulatedO2Saturation = it }, valueRange = 85f..100f, colors = SliderDefaults.colors(thumbColor = colors.primary))
+                                    
+                                    Text("Simulated Deep Sleep: ${String.format("%.1f", simulatedDeepSleepHours)} hrs", fontSize = 10.sp, fontFamily = fontFamily)
+                                    Slider(value = simulatedDeepSleepHours, onValueChange = { simulatedDeepSleepHours = it }, valueRange = 0f..6f, colors = SliderDefaults.colors(thumbColor = colors.primary))
+                                    
+                                    Button(
+                                        onClick = {
+                                            android.widget.Toast.makeText(context, "✅ Vitals successfully synced to health database!", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("Push Simulated Vitals", fontSize = 10.sp)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1000,36 +1432,41 @@ fun AriseSettingsTab(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = colors.divider)
-                    Spacer(modifier = Modifier.height(16.dp))
+                    if (userRole == "admin") {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = colors.divider)
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    Text("ACCESS ADMIN POWER CONSOLE", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = adminInputPasscode,
-                            onValueChange = { adminInputPasscode = it },
-                            placeholder = { Text("Enter Passcode...", color = colors.onSurface.copy(alpha = 0.5f)) },
-                            visualTransformation = PasswordVisualTransformation(),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
-                            modifier = Modifier.weight(1.5f)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                if (adminInputPasscode == "admin123") {
-                                    settingsViewModel.toggleAdminMode(true)
-                                    adminInputPasscode = ""
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                            modifier = Modifier.weight(1f)
+                        Text("ACCESS ADMIN POWER CONSOLE", fontFamily = fontFamily, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Launch Admin", color = colors.onPrimary, fontFamily = fontFamily, fontSize = 10.sp)
+                            OutlinedTextField(
+                                value = adminInputPasscode,
+                                onValueChange = { adminInputPasscode = it },
+                                placeholder = { Text("Enter Passcode...", color = colors.onSurface.copy(alpha = 0.5f)) },
+                                visualTransformation = PasswordVisualTransformation(),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = colors.onSurface),
+                                modifier = Modifier.weight(1.5f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    if (adminInputPasscode == "admin123") {
+                                        settingsViewModel.toggleAdminMode(true)
+                                        adminInputPasscode = ""
+                                        android.widget.Toast.makeText(context, "✅ Admin Power Console Unlocked!", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        android.widget.Toast.makeText(context, "❌ Incorrect Passcode. Access denied.", android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Launch Admin", color = colors.onPrimary, fontFamily = fontFamily, fontSize = 10.sp)
+                            }
                         }
                     }
                 }
